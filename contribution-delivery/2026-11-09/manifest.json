@@ -14,18 +14,19 @@
     "exact_remote_heads_passed": 8,
     "upstream_prs_open": 10,
     "publication_verified_at": "2026-11-09T16:14:26Z",
-    "upstream_ci": "Eight latest-head primary CI runs (#6048–#6055) succeeded. #6046's corrected-golden head is still in progress; its nine other workflows and the exact-source 36-test/typecheck/build verification succeeded. #6047 retains one Windows abort-test failure not reproduced in isolated exact base/patch reruns.",
+    "upstream_ci": "Nine latest-head primary CI runs (#6046 and #6048–#6055) succeeded. #6046's corrected-golden head c26c68a93fb11035a0e02cd08b171a295abbddb4 now also passed the full upstream main CI. #6047 retains one Windows abort-test failure not reproduced in isolated exact base/patch reruns.",
     "pr_body_update_pending": [],
     "pr_body_updates_completed": [
       6046
     ],
     "comment_only_external_followups_after_tested_source": 2,
     "behavioral_versions_verified": 10,
-    "latest_head_primary_ci_success": 8,
-    "latest_head_primary_ci_in_progress": 1,
+    "latest_head_primary_ci_success": 9,
+    "latest_head_primary_ci_in_progress": 0,
     "latest_head_primary_ci_failure": 1,
     "internal_validation_pr_closed": true,
-    "open_review_threads": 0
+    "open_review_threads": 0,
+    "primary_ci_verified_at": "2026-11-09T16:24:59Z"
   },
   "entries": [
     {
@@ -169,11 +170,12 @@
         {
           "id": 42645148859,
           "name": "CI",
-          "status": "in_progress",
-          "conclusion": null,
+          "status": "completed",
+          "conclusion": "success",
           "url": "https://github.com/ranxianglei/billion-context/actions/runs/42645148859",
           "head_sha": "c26c68a93fb11035a0e02cd08b171a295abbddb4",
-          "created_at": "2026-11-09T15:29:17Z"
+          "created_at": "2026-11-09T15:29:17Z",
+          "updated_at": "2026-11-09T16:15:34Z"
         }
       ],
       "publication_status": "upstream_pr_open",
@@ -217,11 +219,12 @@
       "source_tested_sha": "c26c68a93fb11035a0e02cd08b171a295abbddb4",
       "latest_primary_ci": {
         "id": 42645148859,
-        "status": "in_progress",
-        "conclusion": null,
+        "status": "completed",
+        "conclusion": "success",
         "url": "https://github.com/ranxianglei/billion-context/actions/runs/42645148859",
         "head_sha": "c26c68a93fb11035a0e02cd08b171a295abbddb4",
-        "verified_at": "2026-11-09T16:14:26Z"
+        "verified_at": "2026-11-09T16:24:59Z",
+        "updated_at": "2026-11-09T16:15:34Z"
       },
       "review_threads_checked_at": "2026-11-09T16:14:26Z",
       "open_review_threads": 0

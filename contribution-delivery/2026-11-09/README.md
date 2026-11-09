@@ -2,7 +2,7 @@
 
 Ten independent improvements are published as upstream pull requests **#6046–#6055**, each linked to its own issue **#6036–#6045**. All ten PRs are open and **0 have merged** at this verification. All ten behavioral source versions have passed their targeted regression and related suites, typecheck and production build in fresh GitHub Actions checkouts. The latest heads of #6053 and #6054 contain maintainer comment-only follow-ups; their tested source revisions are listed separately.
 
-The latest-head main CI matrices now pass for eight PRs, #6048–#6055. #6046's updated head is still running its main matrix, and #6047 retains the isolated Windows abort-test failure described below. The original ten source heads were checked in [isolated validation](https://github.com/Afloat16/claude-mem/actions/runs/42633003467); the updated SimHash head was checked again separately.
+The latest-head main CI matrices now pass for nine PRs, #6046 and #6048–#6055. #6046's corrected-golden head has completed the full upstream main matrix successfully; #6047 retains the Windows abort-test failure described below. The original ten source heads were checked in [isolated validation](https://github.com/Afloat16/claude-mem/actions/runs/42633003467); the updated SimHash head was checked again separately.
 
 | # | Improvement | Upstream PR | Latest head | Tested source | Validation |
 |---|---|---|---|---|---|
@@ -21,7 +21,7 @@ The latest-head main CI matrices now pass for eight PRs, #6048–#6055. #6046's 
 
 | PR | Latest head | Latest primary CI |
 |---|---|---|
-| [#6046](https://github.com/ranxianglei/billion-context/pull/6046) | `c26c68a9` | [in_progress](https://github.com/ranxianglei/billion-context/actions/runs/42645148859) |
+| [#6046](https://github.com/ranxianglei/billion-context/pull/6046) | `c26c68a9` | [success](https://github.com/ranxianglei/billion-context/actions/runs/42645148859) |
 | [#6047](https://github.com/ranxianglei/billion-context/pull/6047) | `caf14bb7` | [failure](https://github.com/ranxianglei/billion-context/actions/runs/42640108520) |
 | [#6048](https://github.com/ranxianglei/billion-context/pull/6048) | `01e42ad7` | [success](https://github.com/ranxianglei/billion-context/actions/runs/42640259274) |
 | [#6049](https://github.com/ranxianglei/billion-context/pull/6049) | `76189b11` | [success](https://github.com/ranxianglei/billion-context/actions/runs/42640267350) |
@@ -36,7 +36,7 @@ The #6053 and #6054 latest heads include the preserved external comment-only com
 
 ## CI follow-up
 
-**#6046:** The first upstream run exposed the persisted fold-anchor fingerprint changes caused by the corrected SimHash arithmetic. The repository's official generator regenerated four golden files. Complete normalized-state comparisons allowed changes only in `metadata.foldAnchors.<hash>.sh`: 13 stored fingerprints changed across the four wire scenarios; wire bodies and all other persisted state remained identical. Each file changes exactly three digest fields. The unchanged base passed 17 storage golden/restart tests, and the correction with updated goldens passed 36 tests in [before/after verification](https://github.com/Afloat16/claude-mem/actions/runs/42644612600/job/129254383909). Committed head `c26c68a93fb11035a0e02cd08b171a295abbddb4` then independently passed all 36 tests, typecheck and build in [fresh-checkout validation](https://github.com/Afloat16/claude-mem/actions/runs/42645200000/job/129256490757). The upstream PR body was updated to explain the intentional golden update and verified against the saved text.
+**#6046:** The first upstream run exposed the persisted fold-anchor fingerprint changes caused by the corrected SimHash arithmetic. The repository's official generator regenerated four golden files. Complete normalized-state comparisons allowed changes only in `metadata.foldAnchors.<hash>.sh`: 13 stored fingerprints changed across the four wire scenarios; wire bodies and all other persisted state remained identical. Each file changes exactly three digest fields. The unchanged base passed 17 storage golden/restart tests, and the correction with updated goldens passed 36 tests in [before/after verification](https://github.com/Afloat16/claude-mem/actions/runs/42644612600/job/129254383909). Committed head `c26c68a93fb11035a0e02cd08b171a295abbddb4` then independently passed all 36 tests, typecheck and build in [fresh-checkout validation](https://github.com/Afloat16/claude-mem/actions/runs/42645200000/job/129256490757). The upstream PR body was updated to explain the intentional golden update and verified against the saved text. Its full upstream main [CI run](https://github.com/ranxianglei/billion-context/actions/runs/42645148859) has now completed successfully on the same exact head.
 
 **#6047:** The full upstream run had one Windows Node 22 failure in `abort x proxy-openai-sse` (`closed=0`). The same single test passed separately on both unchanged base and exact patch, and the 21 snapshot/alignment tests also passed on Windows: [isolated verification](https://github.com/Afloat16/claude-mem/actions/runs/42644430177/job/129253741244). The failure was not reproduced in isolation; no unrelated socket behavior was changed.
 
@@ -47,3 +47,5 @@ The manifest records current upstream workflow states separately from these comp
 #6053 received `55db71ddf8bab6c063b146c90f58ada35213414a`, a contract-comment clarification after tested source `435d2d3e5b6670b58dca336793ac97361a6e2e02`. #6054 received `168e8ca1cd76dd980ba485251412d06aba919156`, a one-line LRU-policy comment after tested source `ffb5a3dcf0ecbf07a6d28e3db54a64bd05193fa8`. Exact comparisons confirm neither changes executable behavior; both external commits are retained.
 
 Publication snapshot: 2026-11-09T16:14:26Z.
+
+CI-only update: 2026-11-09T16:24:59Z. This update records #6046's completed main CI without changing the prior publication snapshot or #6047's failure/isolated-rerun evidence.

@@ -11,13 +11,16 @@
     "internal_validation_pr": "https://github.com/Afloat16/billion-context/pull/1",
     "blockers": [],
     "validation_run": "https://github.com/Afloat16/claude-mem/actions/runs/42633003467",
-    "exact_remote_heads_passed": 10,
+    "exact_remote_heads_passed": 8,
     "upstream_prs_open": 10,
-    "publication_verified_at": "2026-11-09T15:33:00Z",
+    "publication_verified_at": "2026-11-09T15:51:45Z",
     "upstream_ci": "The full upstream matrices are still running. Initial #6046 storage-golden failures were corrected with four official regenerated snapshots, and the new exact head passed 36 related tests/typecheck/build. #6047 had one Windows abort-test failure that was not reproduced in isolated exact base/patch reruns; no unrelated socket changes were made.",
-    "pr_body_update_pending": [
+    "pr_body_update_pending": [],
+    "pr_body_updates_completed": [
       6046
-    ]
+    ],
+    "comment_only_external_followups_after_tested_source": 2,
+    "behavioral_versions_verified": 10
   },
   "entries": [
     {
@@ -56,7 +59,7 @@
       },
       "duplicate_screening": "Original feature #2266; no matching overflow correction found.",
       "pr_title": "fix: prevent SimHash feature vote overflow",
-      "pr_body": "## Problem\n\nSigned 8-bit vote counters overflow within the existing 256-feature sampling budget. Repeating one shingle can reverse its sketch at 128 votes or collapse it to zero at 256 votes, allowing unrelated repeated messages to collide.\n\n## Changes\n\nUse signed 16-bit vote counters, which cover the full sampled vote range without changing feature sampling or the 16-character serialized sketch format.\n\nThe regression suite checks repeated Latin and CJK shingles around the 127/128 and 255/256 boundaries and across sampling strides, plus distinct unrelated sketches at the cap.\n\n## Storage golden update\n\n`fold-reconcile.ts` stores these same SimHash values in `metadata.foldAnchors.<id>.sh`. Correcting the arithmetic intentionally changes those persisted fingerprints. Regenerate the four storage-render golden files with the repository's `scripts/update-storage-render-goldens.ts`.\n\nThe before/after verification compared complete normalized persisted state for all four wire scenarios. Only 13 fold-anchor `sh` values changed; outbound bodies, fold/edit landmarks, state shape, block contents, stats and all other persisted fields remained unchanged. Each golden changes only `stateDigest`, `stateDigestAligned` and `sectionDigests.metadata`. No assertion or normalization rule was weakened.\n\n[Before/after verification](https://github.com/Afloat16/claude-mem/actions/runs/42644612600/job/129254383909): the unchanged base passed all 17 storage golden/restart tests; the corrected fingerprints and regenerated goldens passed all 36 SimHash, alignment, storage-render and restart tests. Typecheck and production build also passed.\n\n## Validation\n\nExact commit `c26c68a93fb11035a0e02cd08b171a295abbddb4` passed all 36 tests, `npm run typecheck`, and `npm run build` in a fresh Node 22 checkout: [committed-version verification](https://github.com/Afloat16/claude-mem/actions/runs/42645200000/job/129256490757). The tracked source and golden files remained unchanged during validation. This checks the targeted and related suites plus the four-wire storage and restart contracts; the upstream full CI matrix runs independently.\n\n## Related work\n\nOriginal feature #2266; no matching vote-overflow correction was found in the upstream or prior contribution history.\n\nCloses #6036.\n",
+      "pr_body": "## Problem\r\n\r\nSigned 8-bit vote counters overflow within the existing 256-feature sampling budget. Repeating one shingle can reverse its sketch at 128 votes or collapse it to zero at 256 votes, allowing unrelated repeated messages to collide.\r\n\r\n## Changes\r\n\r\nUse signed 16-bit vote counters, which cover the full sampled vote range without changing feature sampling or the 16-character serialized sketch format.\r\n\r\nThe regression suite checks repeated Latin and CJK shingles around the 127/128 and 255/256 boundaries and across sampling strides, plus distinct unrelated sketches at the cap.\r\n\r\n## Storage golden update\r\n\r\n`fold-reconcile.ts` stores these same SimHash values in `metadata.foldAnchors.<id>.sh`. Correcting the arithmetic intentionally changes those persisted fingerprints. Regenerate the four storage-render golden files with the repository's `scripts/update-storage-render-goldens.ts`.\r\n\r\nThe before/after verification compared complete normalized persisted state for all four wire scenarios. Only 13 fold-anchor `sh` values changed; outbound bodies, fold/edit landmarks, state shape, block contents, stats and all other persisted fields remained unchanged. Each golden changes only `stateDigest`, `stateDigestAligned` and `sectionDigests.metadata`. No assertion or normalization rule was weakened.\r\n\r\n[Before/after verification](https://github.com/Afloat16/claude-mem/actions/runs/42644612600/job/129254383909): the unchanged base passed all 17 storage golden/restart tests; the corrected fingerprints and regenerated goldens passed all 36 SimHash, alignment, storage-render and restart tests. Typecheck and production build also passed.\r\n\r\n## Validation\r\n\r\nExact commit `c26c68a93fb11035a0e02cd08b171a295abbddb4` passed all 36 tests, `npm run typecheck`, and `npm run build` in a fresh Node 22 checkout: [committed-version verification](https://github.com/Afloat16/claude-mem/actions/runs/42645200000/job/129256490757). The tracked source and golden files remained unchanged during validation. This checks the targeted and related suites plus the four-wire storage and restart contracts; the upstream full CI matrix runs independently.\r\n\r\n## Related work\r\n\r\nOriginal feature #2266; no matching vote-overflow correction was found in the upstream or prior contribution history.\r\n\r\nCloses #6036.\r\n",
       "prefilled_pr_url": "https://github.com/ranxianglei/billion-context/compare/master...Afloat16:billion-context:2026-11-09_fix-simhash-vote-overflow?expand=1&title=fix%3A%20prevent%20SimHash%20feature%20vote%20overflow&body=%23%23%20Problem%0A%0ASigned%208-bit%20vote%20counters%20overflow%20within%20the%20existing%20256-feature%20sampling%20budget.%20Repeating%20one%20shingle%20can%20reverse%20its%20sketch%20at%20128%20votes%20or%20collapse%20it%20to%20zero%20at%20256%20votes%2C%20allowing%20unrelated%20repeated%20messages%20to%20collide.%0A%0A%23%23%20Changes%0A%0AUse%20signed%2016-bit%20vote%20counters%2C%20which%20cover%20the%20full%20sampled%20vote%20range%20without%20changing%20feature%20sampling%20or%20the%2016-character%20serialized%20sketch%20format.%0A%0AThe%20regression%20suite%20checks%20repeated%20Latin%20and%20CJK%20shingles%20around%20the%20127%2F128%20and%20255%2F256%20boundaries%20and%20across%20sampling%20strides%2C%20plus%20distinct%20unrelated%20sketches%20at%20the%20cap.%0A%0A%23%23%20Storage%20golden%20update%0A%0A%60fold-reconcile.ts%60%20stores%20these%20same%20SimHash%20values%20in%20%60metadata.foldAnchors.%3Cid%3E.sh%60.%20Correcting%20the%20arithmetic%20intentionally%20changes%20those%20persisted%20fingerprints.%20Regenerate%20the%20four%20storage-render%20golden%20files%20with%20the%20repository's%20%60scripts%2Fupdate-storage-render-goldens.ts%60.%0A%0AThe%20before%2Fafter%20verification%20compared%20complete%20normalized%20persisted%20state%20for%20all%20four%20wire%20scenarios.%20Only%2013%20fold-anchor%20%60sh%60%20values%20changed%3B%20outbound%20bodies%2C%20fold%2Fedit%20landmarks%2C%20state%20shape%2C%20block%20contents%2C%20stats%20and%20all%20other%20persisted%20fields%20remained%20unchanged.%20Each%20golden%20changes%20only%20%60stateDigest%60%2C%20%60stateDigestAligned%60%20and%20%60sectionDigests.metadata%60.%20No%20assertion%20or%20normalization%20rule%20was%20weakened.%0A%0A%5BBefore%2Fafter%20verification%5D(https%3A%2F%2Fgithub.com%2FAfloat16%2Fclaude-mem%2Factions%2Fruns%2F42644612600%2Fjob%2F129254383909)%3A%20the%20unchanged%20base%20passed%20all%2017%20storage%20golden%2Frestart%20tests%3B%20the%20corrected%20fingerprints%20and%20regenerated%20goldens%20passed%20all%2036%20SimHash%2C%20alignment%2C%20storage-render%20and%20restart%20tests.%20Typecheck%20and%20production%20build%20also%20passed.%0A%0A%23%23%20Validation%0A%0AExact%20commit%20%60c26c68a93fb11035a0e02cd08b171a295abbddb4%60%20passed%20all%2036%20tests%2C%20%60npm%20run%20typecheck%60%2C%20and%20%60npm%20run%20build%60%20in%20a%20fresh%20Node%2022%20checkout%3A%20%5Bcommitted-version%20verification%5D(https%3A%2F%2Fgithub.com%2FAfloat16%2Fclaude-mem%2Factions%2Fruns%2F42645200000%2Fjob%2F129256490757).%20The%20tracked%20source%20and%20golden%20files%20remained%20unchanged%20during%20validation.%20This%20checks%20the%20targeted%20and%20related%20suites%20plus%20the%20four-wire%20storage%20and%20restart%20contracts%3B%20the%20upstream%20full%20CI%20matrix%20runs%20independently.%0A%0A%23%23%20Related%20work%0A%0AOriginal%20feature%20%232266%3B%20no%20matching%20vote-overflow%20correction%20was%20found%20in%20the%20upstream%20or%20prior%20contribution%20history.%0A%0ACloses%20%236036.%0A",
       "prefilled_issue_url": "https://github.com/ranxianglei/billion-context/issues/new?title=%5BBug%5D%20Prevent%20SimHash%20feature%20vote%20overflow&body=%23%23%20Version%0A%0Abillion-context%200.1.213%2C%20master%20%604be21b08ed3da8b69d1800a10a9c0b9c5a707f71%60.%0A%0A%23%23%20Reproduction%0A%0A%60simhashHex(Array(257).fill(%22alpha%22).join(%22%20%22))%60%20and%20the%20same%20input%20made%20of%20%60omega%60%20both%20collapse%20to%20zero.%20A%20single%20repeated%20bigram%20has%20one%20stable%20fingerprint%3B%20repeating%20it%20128%20or%20256%20times%20changes%20that%20fingerprint%20because%20the%20signed%208-bit%20votes%20overflow%20within%20%60MAX_FEATURES%20%3D%20256%60.%0A%0A%23%23%20Impact%20and%20expected%20behavior%0A%0ASigned%208-bit%20counters%20overflow%20within%20the%20existing%20256-feature%20sampling%20budget%2C%20collapsing%20repeated-message%20sketches%20and%20causing%20unrelated%20messages%20to%20collide.%0A%0AUse%20signed%2016-bit%20vote%20counters%20while%20preserving%20sampling%20and%20the%20serialized%20sketch%20format.%0A%0A%23%23%20Related%20work%0A%0AOriginal%20feature%20%232266%3B%20no%20matching%20overflow%20correction%20found.%0A%0AClassification%3A%20p2%3B%20cross-host%3B%20scope%2Fother.%0A",
       "previous_local_attempt": {
@@ -70,7 +73,8 @@
         "merged": false,
         "head": "c26c68a93fb11035a0e02cd08b171a295abbddb4",
         "issue": 6036,
-        "issue_url": "https://github.com/ranxianglei/billion-context/issues/6036"
+        "issue_url": "https://github.com/ranxianglei/billion-context/issues/6036",
+        "merged_at": null
       },
       "issue_url": "https://github.com/ranxianglei/billion-context/issues/6036",
       "upstream_workflow_runs": [
@@ -192,7 +196,8 @@
         "typecheck": "passed",
         "build": "passed",
         "scope": "targeted and related suites; not the full upstream matrix"
-      }
+      },
+      "source_tested_sha": "c26c68a93fb11035a0e02cd08b171a295abbddb4"
     },
     {
       "number": 2,
@@ -237,7 +242,8 @@
         "merged": false,
         "head": "caf14bb702346eae823ede9b46d501952b3cca4d",
         "issue": 6037,
-        "issue_url": "https://github.com/ranxianglei/billion-context/issues/6037"
+        "issue_url": "https://github.com/ranxianglei/billion-context/issues/6037",
+        "merged_at": null
       },
       "issue_url": "https://github.com/ranxianglei/billion-context/issues/6037",
       "upstream_workflow_runs": [
@@ -346,7 +352,8 @@
           "failed": 0
         },
         "conclusion": "The failing socket-abort case was not reproduced in isolated Windows runs on either the unchanged base or exact patch. No unrelated socket changes were made."
-      }
+      },
+      "source_tested_sha": "caf14bb702346eae823ede9b46d501952b3cca4d"
     },
     {
       "number": 3,
@@ -391,7 +398,8 @@
         "merged": false,
         "head": "01e42ad79402ea62220e7ac60c2d54075da8c4ef",
         "issue": 6038,
-        "issue_url": "https://github.com/ranxianglei/billion-context/issues/6038"
+        "issue_url": "https://github.com/ranxianglei/billion-context/issues/6038",
+        "merged_at": null
       },
       "issue_url": "https://github.com/ranxianglei/billion-context/issues/6038",
       "upstream_workflow_runs": [
@@ -484,7 +492,8 @@
           "head_sha": "01e42ad79402ea62220e7ac60c2d54075da8c4ef"
         }
       ],
-      "publication_status": "upstream_pr_open"
+      "publication_status": "upstream_pr_open",
+      "source_tested_sha": "01e42ad79402ea62220e7ac60c2d54075da8c4ef"
     },
     {
       "number": 4,
@@ -529,7 +538,8 @@
         "merged": false,
         "head": "76189b11ef297ab1244c268f20813ebb3d839fb7",
         "issue": 6039,
-        "issue_url": "https://github.com/ranxianglei/billion-context/issues/6039"
+        "issue_url": "https://github.com/ranxianglei/billion-context/issues/6039",
+        "merged_at": null
       },
       "issue_url": "https://github.com/ranxianglei/billion-context/issues/6039",
       "upstream_workflow_runs": [
@@ -614,7 +624,8 @@
           "head_sha": "76189b11ef297ab1244c268f20813ebb3d839fb7"
         }
       ],
-      "publication_status": "upstream_pr_open"
+      "publication_status": "upstream_pr_open",
+      "source_tested_sha": "76189b11ef297ab1244c268f20813ebb3d839fb7"
     },
     {
       "number": 5,
@@ -659,7 +670,8 @@
         "merged": false,
         "head": "1b43b991f3673d1acb552278088701e0e831e69c",
         "issue": 6040,
-        "issue_url": "https://github.com/ranxianglei/billion-context/issues/6040"
+        "issue_url": "https://github.com/ranxianglei/billion-context/issues/6040",
+        "merged_at": null
       },
       "issue_url": "https://github.com/ranxianglei/billion-context/issues/6040",
       "upstream_workflow_runs": [
@@ -744,7 +756,8 @@
           "head_sha": "1b43b991f3673d1acb552278088701e0e831e69c"
         }
       ],
-      "publication_status": "upstream_pr_open"
+      "publication_status": "upstream_pr_open",
+      "source_tested_sha": "1b43b991f3673d1acb552278088701e0e831e69c"
     },
     {
       "number": 6,
@@ -789,7 +802,8 @@
         "merged": false,
         "head": "312e4218329869d6d27b4f330926038ae61c485f",
         "issue": 6041,
-        "issue_url": "https://github.com/ranxianglei/billion-context/issues/6041"
+        "issue_url": "https://github.com/ranxianglei/billion-context/issues/6041",
+        "merged_at": null
       },
       "issue_url": "https://github.com/ranxianglei/billion-context/issues/6041",
       "upstream_workflow_runs": [
@@ -890,7 +904,8 @@
           "head_sha": "312e4218329869d6d27b4f330926038ae61c485f"
         }
       ],
-      "publication_status": "upstream_pr_open"
+      "publication_status": "upstream_pr_open",
+      "source_tested_sha": "312e4218329869d6d27b4f330926038ae61c485f"
     },
     {
       "number": 7,
@@ -935,7 +950,8 @@
         "merged": false,
         "head": "105b84dd95c73eccb3eab83a2c199e0c1413b1f4",
         "issue": 6042,
-        "issue_url": "https://github.com/ranxianglei/billion-context/issues/6042"
+        "issue_url": "https://github.com/ranxianglei/billion-context/issues/6042",
+        "merged_at": null
       },
       "issue_url": "https://github.com/ranxianglei/billion-context/issues/6042",
       "upstream_workflow_runs": [
@@ -1036,7 +1052,8 @@
           "head_sha": "105b84dd95c73eccb3eab83a2c199e0c1413b1f4"
         }
       ],
-      "publication_status": "upstream_pr_open"
+      "publication_status": "upstream_pr_open",
+      "source_tested_sha": "105b84dd95c73eccb3eab83a2c199e0c1413b1f4"
     },
     {
       "number": 8,
@@ -1044,8 +1061,8 @@
       "slug": "attach-invalid-timestamps",
       "branch": "2026-11-09_fix-attach-invalid-timestamps",
       "base_commit": "4be21b08ed3da8b69d1800a10a9c0b9c5a707f71",
-      "remote_commit": "435d2d3e5b6670b58dca336793ac97361a6e2e02",
-      "commit_url": "https://github.com/Afloat16/billion-context/commit/435d2d3e5b6670b58dca336793ac97361a6e2e02",
+      "remote_commit": "55db71ddf8bab6c063b146c90f58ada35213414a",
+      "commit_url": "https://github.com/Afloat16/billion-context/commit/55db71ddf8bab6c063b146c90f58ada35213414a",
       "changed_files": [
         "src/attach-heartbeat.ts",
         "tests/attach-invalid-timestamps.test.ts"
@@ -1079,9 +1096,10 @@
         "url": "https://github.com/ranxianglei/billion-context/pull/6053",
         "state": "open",
         "merged": false,
-        "head": "435d2d3e5b6670b58dca336793ac97361a6e2e02",
+        "head": "55db71ddf8bab6c063b146c90f58ada35213414a",
         "issue": 6043,
-        "issue_url": "https://github.com/ranxianglei/billion-context/issues/6043"
+        "issue_url": "https://github.com/ranxianglei/billion-context/issues/6043",
+        "merged_at": null
       },
       "issue_url": "https://github.com/ranxianglei/billion-context/issues/6043",
       "upstream_workflow_runs": [
@@ -1166,7 +1184,19 @@
           "head_sha": "435d2d3e5b6670b58dca336793ac97361a6e2e02"
         }
       ],
-      "publication_status": "upstream_pr_open"
+      "publication_status": "upstream_pr_open",
+      "source_tested_sha": "435d2d3e5b6670b58dca336793ac97361a6e2e02",
+      "external_followup": {
+        "author": "ci-check",
+        "head": "55db71ddf8bab6c063b146c90f58ada35213414a",
+        "parent": "435d2d3e5b6670b58dca336793ac97361a6e2e02",
+        "changed_files": [
+          "src/attach-heartbeat.ts"
+        ],
+        "change": "Only the noteColdLoad contract comment explains why missing or invalid timestamps disarm pending alarms.",
+        "compare": "https://github.com/Afloat16/billion-context/compare/435d2d3e5b6670b58dca336793ac97361a6e2e02...55db71ddf8bab6c063b146c90f58ada35213414a",
+        "behavior_unchanged": true
+      }
     },
     {
       "number": 9,
@@ -1174,8 +1204,8 @@
       "slug": "watermark-cache-eviction",
       "branch": "2026-11-09_fix-watermark-cache-eviction",
       "base_commit": "4be21b08ed3da8b69d1800a10a9c0b9c5a707f71",
-      "remote_commit": "ffb5a3dcf0ecbf07a6d28e3db54a64bd05193fa8",
-      "commit_url": "https://github.com/Afloat16/billion-context/commit/ffb5a3dcf0ecbf07a6d28e3db54a64bd05193fa8",
+      "remote_commit": "168e8ca1cd76dd980ba485251412d06aba919156",
+      "commit_url": "https://github.com/Afloat16/billion-context/commit/168e8ca1cd76dd980ba485251412d06aba919156",
       "changed_files": [
         "src/agent/pf-channel.ts",
         "tests/watermark-cache-eviction.test.ts"
@@ -1209,9 +1239,10 @@
         "url": "https://github.com/ranxianglei/billion-context/pull/6054",
         "state": "open",
         "merged": false,
-        "head": "ffb5a3dcf0ecbf07a6d28e3db54a64bd05193fa8",
+        "head": "168e8ca1cd76dd980ba485251412d06aba919156",
         "issue": 6044,
-        "issue_url": "https://github.com/ranxianglei/billion-context/issues/6044"
+        "issue_url": "https://github.com/ranxianglei/billion-context/issues/6044",
+        "merged_at": null
       },
       "issue_url": "https://github.com/ranxianglei/billion-context/issues/6044",
       "upstream_workflow_runs": [
@@ -1544,7 +1575,19 @@
           "head_sha": "ffb5a3dcf0ecbf07a6d28e3db54a64bd05193fa8"
         }
       ],
-      "publication_status": "upstream_pr_open"
+      "publication_status": "upstream_pr_open",
+      "source_tested_sha": "ffb5a3dcf0ecbf07a6d28e3db54a64bd05193fa8",
+      "external_followup": {
+        "author": "ework-daemon",
+        "head": "168e8ca1cd76dd980ba485251412d06aba919156",
+        "parent": "ffb5a3dcf0ecbf07a6d28e3db54a64bd05193fa8",
+        "changed_files": [
+          "src/agent/pf-channel.ts"
+        ],
+        "change": "One-line comment clarifies single-entry LRU eviction; no executable change.",
+        "compare": "https://github.com/Afloat16/billion-context/compare/ffb5a3dcf0ecbf07a6d28e3db54a64bd05193fa8...168e8ca1cd76dd980ba485251412d06aba919156",
+        "behavior_unchanged": true
+      }
     },
     {
       "number": 10,
@@ -1589,7 +1632,8 @@
         "merged": false,
         "head": "6b0cb61a6ce69241faff00164e9195c85bb4e9fc",
         "issue": 6045,
-        "issue_url": "https://github.com/ranxianglei/billion-context/issues/6045"
+        "issue_url": "https://github.com/ranxianglei/billion-context/issues/6045",
+        "merged_at": null
       },
       "issue_url": "https://github.com/ranxianglei/billion-context/issues/6045",
       "upstream_workflow_runs": [
@@ -1674,7 +1718,8 @@
           "head_sha": "6b0cb61a6ce69241faff00164e9195c85bb4e9fc"
         }
       ],
-      "publication_status": "upstream_pr_open"
+      "publication_status": "upstream_pr_open",
+      "source_tested_sha": "6b0cb61a6ce69241faff00164e9195c85bb4e9fc"
     }
   ]
 }

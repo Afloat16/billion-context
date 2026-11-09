@@ -13,14 +13,19 @@
     "validation_run": "https://github.com/Afloat16/claude-mem/actions/runs/42633003467",
     "exact_remote_heads_passed": 8,
     "upstream_prs_open": 10,
-    "publication_verified_at": "2026-11-09T15:51:45Z",
-    "upstream_ci": "The full upstream matrices are still running. Initial #6046 storage-golden failures were corrected with four official regenerated snapshots, and the new exact head passed 36 related tests/typecheck/build. #6047 had one Windows abort-test failure that was not reproduced in isolated exact base/patch reruns; no unrelated socket changes were made.",
+    "publication_verified_at": "2026-11-09T16:14:26Z",
+    "upstream_ci": "Eight latest-head primary CI runs (#6048–#6055) succeeded. #6046's corrected-golden head is still in progress; its nine other workflows and the exact-source 36-test/typecheck/build verification succeeded. #6047 retains one Windows abort-test failure not reproduced in isolated exact base/patch reruns.",
     "pr_body_update_pending": [],
     "pr_body_updates_completed": [
       6046
     ],
     "comment_only_external_followups_after_tested_source": 2,
-    "behavioral_versions_verified": 10
+    "behavioral_versions_verified": 10,
+    "latest_head_primary_ci_success": 8,
+    "latest_head_primary_ci_in_progress": 1,
+    "latest_head_primary_ci_failure": 1,
+    "internal_validation_pr_closed": true,
+    "open_review_threads": 0
   },
   "entries": [
     {
@@ -74,41 +79,20 @@
         "head": "c26c68a93fb11035a0e02cd08b171a295abbddb4",
         "issue": 6036,
         "issue_url": "https://github.com/ranxianglei/billion-context/issues/6036",
-        "merged_at": null
+        "merged_at": null,
+        "mergeable": true,
+        "verified_at": "2026-11-09T16:14:26Z"
       },
       "issue_url": "https://github.com/ranxianglei/billion-context/issues/6036",
       "upstream_workflow_runs": [
-        {
-          "id": 42645148775,
-          "name": "e2e-fake-codex",
-          "status": "queued",
-          "conclusion": null,
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42645148775",
-          "head_sha": "c26c68a93fb11035a0e02cd08b171a295abbddb4"
-        },
-        {
-          "id": 42645148859,
-          "name": "CI",
-          "status": "queued",
-          "conclusion": null,
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42645148859",
-          "head_sha": "c26c68a93fb11035a0e02cd08b171a295abbddb4"
-        },
-        {
-          "id": 42645148838,
-          "name": "e2e-native-pi",
-          "status": "completed",
-          "conclusion": "success",
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42645148838",
-          "head_sha": "c26c68a93fb11035a0e02cd08b171a295abbddb4"
-        },
         {
           "id": 42645148934,
           "name": "e2e-codex-persona",
           "status": "completed",
           "conclusion": "success",
           "url": "https://github.com/ranxianglei/billion-context/actions/runs/42645148934",
-          "head_sha": "c26c68a93fb11035a0e02cd08b171a295abbddb4"
+          "head_sha": "c26c68a93fb11035a0e02cd08b171a295abbddb4",
+          "created_at": "2026-11-09T15:29:17Z"
         },
         {
           "id": 42645149025,
@@ -116,7 +100,8 @@
           "status": "completed",
           "conclusion": "success",
           "url": "https://github.com/ranxianglei/billion-context/actions/runs/42645149025",
-          "head_sha": "c26c68a93fb11035a0e02cd08b171a295abbddb4"
+          "head_sha": "c26c68a93fb11035a0e02cd08b171a295abbddb4",
+          "created_at": "2026-11-09T15:29:17Z"
         },
         {
           "id": 42645149057,
@@ -124,15 +109,8 @@
           "status": "completed",
           "conclusion": "success",
           "url": "https://github.com/ranxianglei/billion-context/actions/runs/42645149057",
-          "head_sha": "c26c68a93fb11035a0e02cd08b171a295abbddb4"
-        },
-        {
-          "id": 42645148986,
-          "name": "CI Windows codex overlay (#686)",
-          "status": "completed",
-          "conclusion": "success",
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42645148986",
-          "head_sha": "c26c68a93fb11035a0e02cd08b171a295abbddb4"
+          "head_sha": "c26c68a93fb11035a0e02cd08b171a295abbddb4",
+          "created_at": "2026-11-09T15:29:17Z"
         },
         {
           "id": 42645148967,
@@ -140,15 +118,8 @@
           "status": "completed",
           "conclusion": "success",
           "url": "https://github.com/ranxianglei/billion-context/actions/runs/42645148967",
-          "head_sha": "c26c68a93fb11035a0e02cd08b171a295abbddb4"
-        },
-        {
-          "id": 42645148793,
-          "name": "PR Build Artifact",
-          "status": "in_progress",
-          "conclusion": null,
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42645148793",
-          "head_sha": "c26c68a93fb11035a0e02cd08b171a295abbddb4"
+          "head_sha": "c26c68a93fb11035a0e02cd08b171a295abbddb4",
+          "created_at": "2026-11-09T15:29:17Z"
         },
         {
           "id": 42645149043,
@@ -156,7 +127,53 @@
           "status": "completed",
           "conclusion": "success",
           "url": "https://github.com/ranxianglei/billion-context/actions/runs/42645149043",
-          "head_sha": "c26c68a93fb11035a0e02cd08b171a295abbddb4"
+          "head_sha": "c26c68a93fb11035a0e02cd08b171a295abbddb4",
+          "created_at": "2026-11-09T15:29:17Z"
+        },
+        {
+          "id": 42645148793,
+          "name": "PR Build Artifact",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42645148793",
+          "head_sha": "c26c68a93fb11035a0e02cd08b171a295abbddb4",
+          "created_at": "2026-11-09T15:29:17Z"
+        },
+        {
+          "id": 42645148986,
+          "name": "CI Windows codex overlay (#686)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42645148986",
+          "head_sha": "c26c68a93fb11035a0e02cd08b171a295abbddb4",
+          "created_at": "2026-11-09T15:29:17Z"
+        },
+        {
+          "id": 42645148775,
+          "name": "e2e-fake-codex",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42645148775",
+          "head_sha": "c26c68a93fb11035a0e02cd08b171a295abbddb4",
+          "created_at": "2026-11-09T15:29:17Z"
+        },
+        {
+          "id": 42645148838,
+          "name": "e2e-native-pi",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42645148838",
+          "head_sha": "c26c68a93fb11035a0e02cd08b171a295abbddb4",
+          "created_at": "2026-11-09T15:29:17Z"
+        },
+        {
+          "id": 42645148859,
+          "name": "CI",
+          "status": "in_progress",
+          "conclusion": null,
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42645148859",
+          "head_sha": "c26c68a93fb11035a0e02cd08b171a295abbddb4",
+          "created_at": "2026-11-09T15:29:17Z"
         }
       ],
       "publication_status": "upstream_pr_open",
@@ -197,7 +214,17 @@
         "build": "passed",
         "scope": "targeted and related suites; not the full upstream matrix"
       },
-      "source_tested_sha": "c26c68a93fb11035a0e02cd08b171a295abbddb4"
+      "source_tested_sha": "c26c68a93fb11035a0e02cd08b171a295abbddb4",
+      "latest_primary_ci": {
+        "id": 42645148859,
+        "status": "in_progress",
+        "conclusion": null,
+        "url": "https://github.com/ranxianglei/billion-context/actions/runs/42645148859",
+        "head_sha": "c26c68a93fb11035a0e02cd08b171a295abbddb4",
+        "verified_at": "2026-11-09T16:14:26Z"
+      },
+      "review_threads_checked_at": "2026-11-09T16:14:26Z",
+      "open_review_threads": 0
     },
     {
       "number": 2,
@@ -243,17 +270,29 @@
         "head": "caf14bb702346eae823ede9b46d501952b3cca4d",
         "issue": 6037,
         "issue_url": "https://github.com/ranxianglei/billion-context/issues/6037",
-        "merged_at": null
+        "merged_at": null,
+        "mergeable": true,
+        "verified_at": "2026-11-09T16:14:26Z"
       },
       "issue_url": "https://github.com/ranxianglei/billion-context/issues/6037",
       "upstream_workflow_runs": [
+        {
+          "id": 42640108520,
+          "name": "CI",
+          "status": "completed",
+          "conclusion": "failure",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640108520",
+          "head_sha": "caf14bb702346eae823ede9b46d501952b3cca4d",
+          "created_at": "2026-11-09T14:59:41Z"
+        },
         {
           "id": 42640108742,
           "name": "e2e-fake-codex",
           "status": "completed",
           "conclusion": "success",
           "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640108742",
-          "head_sha": "caf14bb702346eae823ede9b46d501952b3cca4d"
+          "head_sha": "caf14bb702346eae823ede9b46d501952b3cca4d",
+          "created_at": "2026-11-09T14:59:41Z"
         },
         {
           "id": 42640108534,
@@ -261,7 +300,8 @@
           "status": "completed",
           "conclusion": "success",
           "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640108534",
-          "head_sha": "caf14bb702346eae823ede9b46d501952b3cca4d"
+          "head_sha": "caf14bb702346eae823ede9b46d501952b3cca4d",
+          "created_at": "2026-11-09T14:59:41Z"
         },
         {
           "id": 42640108489,
@@ -269,7 +309,8 @@
           "status": "completed",
           "conclusion": "success",
           "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640108489",
-          "head_sha": "caf14bb702346eae823ede9b46d501952b3cca4d"
+          "head_sha": "caf14bb702346eae823ede9b46d501952b3cca4d",
+          "created_at": "2026-11-09T14:59:41Z"
         },
         {
           "id": 42640108500,
@@ -277,7 +318,8 @@
           "status": "completed",
           "conclusion": "success",
           "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640108500",
-          "head_sha": "caf14bb702346eae823ede9b46d501952b3cca4d"
+          "head_sha": "caf14bb702346eae823ede9b46d501952b3cca4d",
+          "created_at": "2026-11-09T14:59:41Z"
         },
         {
           "id": 42640108676,
@@ -285,7 +327,8 @@
           "status": "completed",
           "conclusion": "success",
           "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640108676",
-          "head_sha": "caf14bb702346eae823ede9b46d501952b3cca4d"
+          "head_sha": "caf14bb702346eae823ede9b46d501952b3cca4d",
+          "created_at": "2026-11-09T14:59:41Z"
         },
         {
           "id": 42640108750,
@@ -293,7 +336,8 @@
           "status": "completed",
           "conclusion": "success",
           "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640108750",
-          "head_sha": "caf14bb702346eae823ede9b46d501952b3cca4d"
+          "head_sha": "caf14bb702346eae823ede9b46d501952b3cca4d",
+          "created_at": "2026-11-09T14:59:41Z"
         },
         {
           "id": 42640108675,
@@ -301,7 +345,8 @@
           "status": "completed",
           "conclusion": "success",
           "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640108675",
-          "head_sha": "caf14bb702346eae823ede9b46d501952b3cca4d"
+          "head_sha": "caf14bb702346eae823ede9b46d501952b3cca4d",
+          "created_at": "2026-11-09T14:59:41Z"
         },
         {
           "id": 42640108692,
@@ -309,7 +354,8 @@
           "status": "completed",
           "conclusion": "success",
           "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640108692",
-          "head_sha": "caf14bb702346eae823ede9b46d501952b3cca4d"
+          "head_sha": "caf14bb702346eae823ede9b46d501952b3cca4d",
+          "created_at": "2026-11-09T14:59:41Z"
         },
         {
           "id": 42640108739,
@@ -317,15 +363,8 @@
           "status": "completed",
           "conclusion": "success",
           "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640108739",
-          "head_sha": "caf14bb702346eae823ede9b46d501952b3cca4d"
-        },
-        {
-          "id": 42640108520,
-          "name": "CI",
-          "status": "completed",
-          "conclusion": "failure",
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640108520",
-          "head_sha": "caf14bb702346eae823ede9b46d501952b3cca4d"
+          "head_sha": "caf14bb702346eae823ede9b46d501952b3cca4d",
+          "created_at": "2026-11-09T14:59:41Z"
         }
       ],
       "publication_status": "upstream_pr_open",
@@ -353,7 +392,17 @@
         },
         "conclusion": "The failing socket-abort case was not reproduced in isolated Windows runs on either the unchanged base or exact patch. No unrelated socket changes were made."
       },
-      "source_tested_sha": "caf14bb702346eae823ede9b46d501952b3cca4d"
+      "source_tested_sha": "caf14bb702346eae823ede9b46d501952b3cca4d",
+      "latest_primary_ci": {
+        "id": 42640108520,
+        "status": "completed",
+        "conclusion": "failure",
+        "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640108520",
+        "head_sha": "caf14bb702346eae823ede9b46d501952b3cca4d",
+        "verified_at": "2026-11-09T16:14:26Z"
+      },
+      "review_threads_checked_at": "2026-11-09T16:14:26Z",
+      "open_review_threads": 0
     },
     {
       "number": 3,
@@ -399,7 +448,9 @@
         "head": "01e42ad79402ea62220e7ac60c2d54075da8c4ef",
         "issue": 6038,
         "issue_url": "https://github.com/ranxianglei/billion-context/issues/6038",
-        "merged_at": null
+        "merged_at": null,
+        "mergeable": true,
+        "verified_at": "2026-11-09T16:14:26Z"
       },
       "issue_url": "https://github.com/ranxianglei/billion-context/issues/6038",
       "upstream_workflow_runs": [
@@ -409,7 +460,8 @@
           "status": "completed",
           "conclusion": "success",
           "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640259420",
-          "head_sha": "01e42ad79402ea62220e7ac60c2d54075da8c4ef"
+          "head_sha": "01e42ad79402ea62220e7ac60c2d54075da8c4ef",
+          "created_at": "2026-11-09T15:00:34Z"
         },
         {
           "id": 42640259366,
@@ -417,7 +469,8 @@
           "status": "completed",
           "conclusion": "success",
           "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640259366",
-          "head_sha": "01e42ad79402ea62220e7ac60c2d54075da8c4ef"
+          "head_sha": "01e42ad79402ea62220e7ac60c2d54075da8c4ef",
+          "created_at": "2026-11-09T15:00:33Z"
         },
         {
           "id": 42640259298,
@@ -425,15 +478,8 @@
           "status": "completed",
           "conclusion": "success",
           "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640259298",
-          "head_sha": "01e42ad79402ea62220e7ac60c2d54075da8c4ef"
-        },
-        {
-          "id": 42640259274,
-          "name": "CI",
-          "status": "queued",
-          "conclusion": null,
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640259274",
-          "head_sha": "01e42ad79402ea62220e7ac60c2d54075da8c4ef"
+          "head_sha": "01e42ad79402ea62220e7ac60c2d54075da8c4ef",
+          "created_at": "2026-11-09T15:00:33Z"
         },
         {
           "id": 42640259248,
@@ -441,7 +487,8 @@
           "status": "completed",
           "conclusion": "success",
           "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640259248",
-          "head_sha": "01e42ad79402ea62220e7ac60c2d54075da8c4ef"
+          "head_sha": "01e42ad79402ea62220e7ac60c2d54075da8c4ef",
+          "created_at": "2026-11-09T15:00:33Z"
         },
         {
           "id": 42640259216,
@@ -449,7 +496,8 @@
           "status": "completed",
           "conclusion": "success",
           "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640259216",
-          "head_sha": "01e42ad79402ea62220e7ac60c2d54075da8c4ef"
+          "head_sha": "01e42ad79402ea62220e7ac60c2d54075da8c4ef",
+          "created_at": "2026-11-09T15:00:33Z"
         },
         {
           "id": 42640259214,
@@ -457,7 +505,8 @@
           "status": "completed",
           "conclusion": "success",
           "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640259214",
-          "head_sha": "01e42ad79402ea62220e7ac60c2d54075da8c4ef"
+          "head_sha": "01e42ad79402ea62220e7ac60c2d54075da8c4ef",
+          "created_at": "2026-11-09T15:00:33Z"
         },
         {
           "id": 42640259260,
@@ -465,7 +514,8 @@
           "status": "completed",
           "conclusion": "success",
           "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640259260",
-          "head_sha": "01e42ad79402ea62220e7ac60c2d54075da8c4ef"
+          "head_sha": "01e42ad79402ea62220e7ac60c2d54075da8c4ef",
+          "created_at": "2026-11-09T15:00:33Z"
         },
         {
           "id": 42640259196,
@@ -473,7 +523,8 @@
           "status": "completed",
           "conclusion": "success",
           "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640259196",
-          "head_sha": "01e42ad79402ea62220e7ac60c2d54075da8c4ef"
+          "head_sha": "01e42ad79402ea62220e7ac60c2d54075da8c4ef",
+          "created_at": "2026-11-09T15:00:33Z"
         },
         {
           "id": 42640259233,
@@ -481,7 +532,8 @@
           "status": "completed",
           "conclusion": "success",
           "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640259233",
-          "head_sha": "01e42ad79402ea62220e7ac60c2d54075da8c4ef"
+          "head_sha": "01e42ad79402ea62220e7ac60c2d54075da8c4ef",
+          "created_at": "2026-11-09T15:00:33Z"
         },
         {
           "id": 42640259194,
@@ -489,11 +541,31 @@
           "status": "completed",
           "conclusion": "success",
           "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640259194",
-          "head_sha": "01e42ad79402ea62220e7ac60c2d54075da8c4ef"
+          "head_sha": "01e42ad79402ea62220e7ac60c2d54075da8c4ef",
+          "created_at": "2026-11-09T15:00:33Z"
+        },
+        {
+          "id": 42640259274,
+          "name": "CI",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640259274",
+          "head_sha": "01e42ad79402ea62220e7ac60c2d54075da8c4ef",
+          "created_at": "2026-11-09T15:00:33Z"
         }
       ],
       "publication_status": "upstream_pr_open",
-      "source_tested_sha": "01e42ad79402ea62220e7ac60c2d54075da8c4ef"
+      "source_tested_sha": "01e42ad79402ea62220e7ac60c2d54075da8c4ef",
+      "latest_primary_ci": {
+        "id": 42640259274,
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640259274",
+        "head_sha": "01e42ad79402ea62220e7ac60c2d54075da8c4ef",
+        "verified_at": "2026-11-09T16:14:26Z"
+      },
+      "review_threads_checked_at": "2026-11-09T16:14:26Z",
+      "open_review_threads": 0
     },
     {
       "number": 4,
@@ -539,7 +611,9 @@
         "head": "76189b11ef297ab1244c268f20813ebb3d839fb7",
         "issue": 6039,
         "issue_url": "https://github.com/ranxianglei/billion-context/issues/6039",
-        "merged_at": null
+        "merged_at": null,
+        "mergeable": true,
+        "verified_at": "2026-11-09T16:14:26Z"
       },
       "issue_url": "https://github.com/ranxianglei/billion-context/issues/6039",
       "upstream_workflow_runs": [
@@ -549,7 +623,8 @@
           "status": "completed",
           "conclusion": "success",
           "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640267622",
-          "head_sha": "76189b11ef297ab1244c268f20813ebb3d839fb7"
+          "head_sha": "76189b11ef297ab1244c268f20813ebb3d839fb7",
+          "created_at": "2026-11-09T15:00:36Z"
         },
         {
           "id": 42640267764,
@@ -557,7 +632,8 @@
           "status": "completed",
           "conclusion": "success",
           "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640267764",
-          "head_sha": "76189b11ef297ab1244c268f20813ebb3d839fb7"
+          "head_sha": "76189b11ef297ab1244c268f20813ebb3d839fb7",
+          "created_at": "2026-11-09T15:00:36Z"
         },
         {
           "id": 42640267605,
@@ -565,7 +641,8 @@
           "status": "completed",
           "conclusion": "success",
           "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640267605",
-          "head_sha": "76189b11ef297ab1244c268f20813ebb3d839fb7"
+          "head_sha": "76189b11ef297ab1244c268f20813ebb3d839fb7",
+          "created_at": "2026-11-09T15:00:36Z"
         },
         {
           "id": 42640267655,
@@ -573,7 +650,8 @@
           "status": "completed",
           "conclusion": "success",
           "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640267655",
-          "head_sha": "76189b11ef297ab1244c268f20813ebb3d839fb7"
+          "head_sha": "76189b11ef297ab1244c268f20813ebb3d839fb7",
+          "created_at": "2026-11-09T15:00:36Z"
         },
         {
           "id": 42640267570,
@@ -581,7 +659,8 @@
           "status": "completed",
           "conclusion": "success",
           "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640267570",
-          "head_sha": "76189b11ef297ab1244c268f20813ebb3d839fb7"
+          "head_sha": "76189b11ef297ab1244c268f20813ebb3d839fb7",
+          "created_at": "2026-11-09T15:00:36Z"
         },
         {
           "id": 42640267598,
@@ -589,7 +668,8 @@
           "status": "completed",
           "conclusion": "success",
           "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640267598",
-          "head_sha": "76189b11ef297ab1244c268f20813ebb3d839fb7"
+          "head_sha": "76189b11ef297ab1244c268f20813ebb3d839fb7",
+          "created_at": "2026-11-09T15:00:36Z"
         },
         {
           "id": 42640267518,
@@ -597,7 +677,8 @@
           "status": "completed",
           "conclusion": "success",
           "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640267518",
-          "head_sha": "76189b11ef297ab1244c268f20813ebb3d839fb7"
+          "head_sha": "76189b11ef297ab1244c268f20813ebb3d839fb7",
+          "created_at": "2026-11-09T15:00:36Z"
         },
         {
           "id": 42640267324,
@@ -605,7 +686,8 @@
           "status": "completed",
           "conclusion": "success",
           "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640267324",
-          "head_sha": "76189b11ef297ab1244c268f20813ebb3d839fb7"
+          "head_sha": "76189b11ef297ab1244c268f20813ebb3d839fb7",
+          "created_at": "2026-11-09T15:00:36Z"
         },
         {
           "id": 42640267706,
@@ -613,19 +695,31 @@
           "status": "completed",
           "conclusion": "success",
           "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640267706",
-          "head_sha": "76189b11ef297ab1244c268f20813ebb3d839fb7"
+          "head_sha": "76189b11ef297ab1244c268f20813ebb3d839fb7",
+          "created_at": "2026-11-09T15:00:36Z"
         },
         {
           "id": 42640267350,
           "name": "CI",
-          "status": "in_progress",
-          "conclusion": null,
+          "status": "completed",
+          "conclusion": "success",
           "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640267350",
-          "head_sha": "76189b11ef297ab1244c268f20813ebb3d839fb7"
+          "head_sha": "76189b11ef297ab1244c268f20813ebb3d839fb7",
+          "created_at": "2026-11-09T15:00:36Z"
         }
       ],
       "publication_status": "upstream_pr_open",
-      "source_tested_sha": "76189b11ef297ab1244c268f20813ebb3d839fb7"
+      "source_tested_sha": "76189b11ef297ab1244c268f20813ebb3d839fb7",
+      "latest_primary_ci": {
+        "id": 42640267350,
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640267350",
+        "head_sha": "76189b11ef297ab1244c268f20813ebb3d839fb7",
+        "verified_at": "2026-11-09T16:14:26Z"
+      },
+      "review_threads_checked_at": "2026-11-09T16:14:26Z",
+      "open_review_threads": 0
     },
     {
       "number": 5,
@@ -671,7 +765,9 @@
         "head": "1b43b991f3673d1acb552278088701e0e831e69c",
         "issue": 6040,
         "issue_url": "https://github.com/ranxianglei/billion-context/issues/6040",
-        "merged_at": null
+        "merged_at": null,
+        "mergeable": true,
+        "verified_at": "2026-11-09T16:14:26Z"
       },
       "issue_url": "https://github.com/ranxianglei/billion-context/issues/6040",
       "upstream_workflow_runs": [
@@ -681,15 +777,17 @@
           "status": "completed",
           "conclusion": "success",
           "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640276441",
-          "head_sha": "1b43b991f3673d1acb552278088701e0e831e69c"
+          "head_sha": "1b43b991f3673d1acb552278088701e0e831e69c",
+          "created_at": "2026-11-09T15:00:40Z"
         },
         {
           "id": 42640276950,
           "name": "CI",
-          "status": "queued",
-          "conclusion": null,
+          "status": "completed",
+          "conclusion": "success",
           "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640276950",
-          "head_sha": "1b43b991f3673d1acb552278088701e0e831e69c"
+          "head_sha": "1b43b991f3673d1acb552278088701e0e831e69c",
+          "created_at": "2026-11-09T15:00:40Z"
         },
         {
           "id": 42640276379,
@@ -697,7 +795,8 @@
           "status": "completed",
           "conclusion": "success",
           "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640276379",
-          "head_sha": "1b43b991f3673d1acb552278088701e0e831e69c"
+          "head_sha": "1b43b991f3673d1acb552278088701e0e831e69c",
+          "created_at": "2026-11-09T15:00:39Z"
         },
         {
           "id": 42640276196,
@@ -705,7 +804,8 @@
           "status": "completed",
           "conclusion": "success",
           "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640276196",
-          "head_sha": "1b43b991f3673d1acb552278088701e0e831e69c"
+          "head_sha": "1b43b991f3673d1acb552278088701e0e831e69c",
+          "created_at": "2026-11-09T15:00:39Z"
         },
         {
           "id": 42640276312,
@@ -713,7 +813,8 @@
           "status": "completed",
           "conclusion": "success",
           "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640276312",
-          "head_sha": "1b43b991f3673d1acb552278088701e0e831e69c"
+          "head_sha": "1b43b991f3673d1acb552278088701e0e831e69c",
+          "created_at": "2026-11-09T15:00:39Z"
         },
         {
           "id": 42640276175,
@@ -721,7 +822,8 @@
           "status": "completed",
           "conclusion": "success",
           "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640276175",
-          "head_sha": "1b43b991f3673d1acb552278088701e0e831e69c"
+          "head_sha": "1b43b991f3673d1acb552278088701e0e831e69c",
+          "created_at": "2026-11-09T15:00:39Z"
         },
         {
           "id": 42640276274,
@@ -729,7 +831,8 @@
           "status": "completed",
           "conclusion": "success",
           "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640276274",
-          "head_sha": "1b43b991f3673d1acb552278088701e0e831e69c"
+          "head_sha": "1b43b991f3673d1acb552278088701e0e831e69c",
+          "created_at": "2026-11-09T15:00:39Z"
         },
         {
           "id": 42640276323,
@@ -737,7 +840,8 @@
           "status": "completed",
           "conclusion": "success",
           "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640276323",
-          "head_sha": "1b43b991f3673d1acb552278088701e0e831e69c"
+          "head_sha": "1b43b991f3673d1acb552278088701e0e831e69c",
+          "created_at": "2026-11-09T15:00:39Z"
         },
         {
           "id": 42640276206,
@@ -745,7 +849,8 @@
           "status": "completed",
           "conclusion": "success",
           "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640276206",
-          "head_sha": "1b43b991f3673d1acb552278088701e0e831e69c"
+          "head_sha": "1b43b991f3673d1acb552278088701e0e831e69c",
+          "created_at": "2026-11-09T15:00:39Z"
         },
         {
           "id": 42640276233,
@@ -753,11 +858,22 @@
           "status": "completed",
           "conclusion": "success",
           "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640276233",
-          "head_sha": "1b43b991f3673d1acb552278088701e0e831e69c"
+          "head_sha": "1b43b991f3673d1acb552278088701e0e831e69c",
+          "created_at": "2026-11-09T15:00:39Z"
         }
       ],
       "publication_status": "upstream_pr_open",
-      "source_tested_sha": "1b43b991f3673d1acb552278088701e0e831e69c"
+      "source_tested_sha": "1b43b991f3673d1acb552278088701e0e831e69c",
+      "latest_primary_ci": {
+        "id": 42640276950,
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640276950",
+        "head_sha": "1b43b991f3673d1acb552278088701e0e831e69c",
+        "verified_at": "2026-11-09T16:14:26Z"
+      },
+      "review_threads_checked_at": "2026-11-09T16:14:26Z",
+      "open_review_threads": 0
     },
     {
       "number": 6,
@@ -803,73 +919,20 @@
         "head": "312e4218329869d6d27b4f330926038ae61c485f",
         "issue": 6041,
         "issue_url": "https://github.com/ranxianglei/billion-context/issues/6041",
-        "merged_at": null
+        "merged_at": null,
+        "mergeable": true,
+        "verified_at": "2026-11-09T16:14:26Z"
       },
       "issue_url": "https://github.com/ranxianglei/billion-context/issues/6041",
       "upstream_workflow_runs": [
-        {
-          "id": 42640358703,
-          "name": "e2e-native-pi",
-          "status": "completed",
-          "conclusion": "success",
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640358703",
-          "head_sha": "312e4218329869d6d27b4f330926038ae61c485f"
-        },
-        {
-          "id": 42640358844,
-          "name": "e2e-fake-codex",
-          "status": "completed",
-          "conclusion": "success",
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640358844",
-          "head_sha": "312e4218329869d6d27b4f330926038ae61c485f"
-        },
-        {
-          "id": 42640358906,
-          "name": "e2e-local-registry",
-          "status": "completed",
-          "conclusion": "success",
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640358906",
-          "head_sha": "312e4218329869d6d27b4f330926038ae61c485f"
-        },
-        {
-          "id": 42640358671,
-          "name": "e2e-codex-persona",
-          "status": "completed",
-          "conclusion": "success",
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640358671",
-          "head_sha": "312e4218329869d6d27b4f330926038ae61c485f"
-        },
-        {
-          "id": 42640358683,
-          "name": "e2e-dsh-plugin-lane",
-          "status": "completed",
-          "conclusion": "success",
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640358683",
-          "head_sha": "312e4218329869d6d27b4f330926038ae61c485f"
-        },
-        {
-          "id": 42640358835,
-          "name": "e2e-native-dsh",
-          "status": "completed",
-          "conclusion": "success",
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640358835",
-          "head_sha": "312e4218329869d6d27b4f330926038ae61c485f"
-        },
-        {
-          "id": 42640358685,
-          "name": "CI Windows codex overlay (#686)",
-          "status": "completed",
-          "conclusion": "success",
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640358685",
-          "head_sha": "312e4218329869d6d27b4f330926038ae61c485f"
-        },
         {
           "id": 42640358719,
           "name": "e2e-native-opencode",
           "status": "completed",
           "conclusion": "success",
           "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640358719",
-          "head_sha": "312e4218329869d6d27b4f330926038ae61c485f"
+          "head_sha": "312e4218329869d6d27b4f330926038ae61c485f",
+          "created_at": "2026-11-09T15:01:08Z"
         },
         {
           "id": 42640358925,
@@ -877,7 +940,8 @@
           "status": "completed",
           "conclusion": "success",
           "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640358925",
-          "head_sha": "312e4218329869d6d27b4f330926038ae61c485f"
+          "head_sha": "312e4218329869d6d27b4f330926038ae61c485f",
+          "created_at": "2026-11-09T15:01:08Z"
         },
         {
           "id": 42640358898,
@@ -885,7 +949,8 @@
           "status": "completed",
           "conclusion": "success",
           "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640358898",
-          "head_sha": "312e4218329869d6d27b4f330926038ae61c485f"
+          "head_sha": "312e4218329869d6d27b4f330926038ae61c485f",
+          "created_at": "2026-11-09T15:01:08Z"
         },
         {
           "id": 42640359204,
@@ -893,19 +958,94 @@
           "status": "completed",
           "conclusion": "success",
           "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640359204",
-          "head_sha": "312e4218329869d6d27b4f330926038ae61c485f"
+          "head_sha": "312e4218329869d6d27b4f330926038ae61c485f",
+          "created_at": "2026-11-09T15:01:08Z"
+        },
+        {
+          "id": 42640358703,
+          "name": "e2e-native-pi",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640358703",
+          "head_sha": "312e4218329869d6d27b4f330926038ae61c485f",
+          "created_at": "2026-11-09T15:01:08Z"
+        },
+        {
+          "id": 42640358844,
+          "name": "e2e-fake-codex",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640358844",
+          "head_sha": "312e4218329869d6d27b4f330926038ae61c485f",
+          "created_at": "2026-11-09T15:01:08Z"
+        },
+        {
+          "id": 42640358906,
+          "name": "e2e-local-registry",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640358906",
+          "head_sha": "312e4218329869d6d27b4f330926038ae61c485f",
+          "created_at": "2026-11-09T15:01:08Z"
+        },
+        {
+          "id": 42640358671,
+          "name": "e2e-codex-persona",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640358671",
+          "head_sha": "312e4218329869d6d27b4f330926038ae61c485f",
+          "created_at": "2026-11-09T15:01:08Z"
+        },
+        {
+          "id": 42640358683,
+          "name": "e2e-dsh-plugin-lane",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640358683",
+          "head_sha": "312e4218329869d6d27b4f330926038ae61c485f",
+          "created_at": "2026-11-09T15:01:08Z"
+        },
+        {
+          "id": 42640358835,
+          "name": "e2e-native-dsh",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640358835",
+          "head_sha": "312e4218329869d6d27b4f330926038ae61c485f",
+          "created_at": "2026-11-09T15:01:08Z"
+        },
+        {
+          "id": 42640358685,
+          "name": "CI Windows codex overlay (#686)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640358685",
+          "head_sha": "312e4218329869d6d27b4f330926038ae61c485f",
+          "created_at": "2026-11-09T15:01:08Z"
         },
         {
           "id": 42640358620,
           "name": "CI",
-          "status": "in_progress",
-          "conclusion": null,
+          "status": "completed",
+          "conclusion": "success",
           "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640358620",
-          "head_sha": "312e4218329869d6d27b4f330926038ae61c485f"
+          "head_sha": "312e4218329869d6d27b4f330926038ae61c485f",
+          "created_at": "2026-11-09T15:01:08Z"
         }
       ],
       "publication_status": "upstream_pr_open",
-      "source_tested_sha": "312e4218329869d6d27b4f330926038ae61c485f"
+      "source_tested_sha": "312e4218329869d6d27b4f330926038ae61c485f",
+      "latest_primary_ci": {
+        "id": 42640358620,
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640358620",
+        "head_sha": "312e4218329869d6d27b4f330926038ae61c485f",
+        "verified_at": "2026-11-09T16:14:26Z"
+      },
+      "review_threads_checked_at": "2026-11-09T16:14:26Z",
+      "open_review_threads": 0
     },
     {
       "number": 7,
@@ -951,81 +1091,20 @@
         "head": "105b84dd95c73eccb3eab83a2c199e0c1413b1f4",
         "issue": 6042,
         "issue_url": "https://github.com/ranxianglei/billion-context/issues/6042",
-        "merged_at": null
+        "merged_at": null,
+        "mergeable": true,
+        "verified_at": "2026-11-09T16:14:26Z"
       },
       "issue_url": "https://github.com/ranxianglei/billion-context/issues/6042",
       "upstream_workflow_runs": [
-        {
-          "id": 42640379383,
-          "name": "e2e-pi-codex-ws",
-          "status": "completed",
-          "conclusion": "success",
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640379383",
-          "head_sha": "105b84dd95c73eccb3eab83a2c199e0c1413b1f4"
-        },
-        {
-          "id": 42640379279,
-          "name": "CI Windows codex overlay (#686)",
-          "status": "completed",
-          "conclusion": "success",
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640379279",
-          "head_sha": "105b84dd95c73eccb3eab83a2c199e0c1413b1f4"
-        },
-        {
-          "id": 42640379408,
-          "name": "e2e-native-dsh",
-          "status": "completed",
-          "conclusion": "success",
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640379408",
-          "head_sha": "105b84dd95c73eccb3eab83a2c199e0c1413b1f4"
-        },
-        {
-          "id": 42640379457,
-          "name": "e2e-native-pi",
-          "status": "completed",
-          "conclusion": "success",
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640379457",
-          "head_sha": "105b84dd95c73eccb3eab83a2c199e0c1413b1f4"
-        },
-        {
-          "id": 42640379266,
-          "name": "PR Build Artifact",
-          "status": "completed",
-          "conclusion": "success",
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640379266",
-          "head_sha": "105b84dd95c73eccb3eab83a2c199e0c1413b1f4"
-        },
-        {
-          "id": 42640379236,
-          "name": "E2E (real codex)",
-          "status": "completed",
-          "conclusion": "success",
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640379236",
-          "head_sha": "105b84dd95c73eccb3eab83a2c199e0c1413b1f4"
-        },
-        {
-          "id": 42640379326,
-          "name": "e2e-fake-codex",
-          "status": "completed",
-          "conclusion": "success",
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640379326",
-          "head_sha": "105b84dd95c73eccb3eab83a2c199e0c1413b1f4"
-        },
-        {
-          "id": 42640379296,
-          "name": "e2e-codex-persona",
-          "status": "completed",
-          "conclusion": "success",
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640379296",
-          "head_sha": "105b84dd95c73eccb3eab83a2c199e0c1413b1f4"
-        },
         {
           "id": 42640379276,
           "name": "e2e-native-opencode",
           "status": "completed",
           "conclusion": "success",
           "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640379276",
-          "head_sha": "105b84dd95c73eccb3eab83a2c199e0c1413b1f4"
+          "head_sha": "105b84dd95c73eccb3eab83a2c199e0c1413b1f4",
+          "created_at": "2026-11-09T15:01:15Z"
         },
         {
           "id": 42640379264,
@@ -1033,7 +1112,80 @@
           "status": "completed",
           "conclusion": "success",
           "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640379264",
-          "head_sha": "105b84dd95c73eccb3eab83a2c199e0c1413b1f4"
+          "head_sha": "105b84dd95c73eccb3eab83a2c199e0c1413b1f4",
+          "created_at": "2026-11-09T15:01:15Z"
+        },
+        {
+          "id": 42640379383,
+          "name": "e2e-pi-codex-ws",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640379383",
+          "head_sha": "105b84dd95c73eccb3eab83a2c199e0c1413b1f4",
+          "created_at": "2026-11-09T15:01:15Z"
+        },
+        {
+          "id": 42640379279,
+          "name": "CI Windows codex overlay (#686)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640379279",
+          "head_sha": "105b84dd95c73eccb3eab83a2c199e0c1413b1f4",
+          "created_at": "2026-11-09T15:01:15Z"
+        },
+        {
+          "id": 42640379408,
+          "name": "e2e-native-dsh",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640379408",
+          "head_sha": "105b84dd95c73eccb3eab83a2c199e0c1413b1f4",
+          "created_at": "2026-11-09T15:01:15Z"
+        },
+        {
+          "id": 42640379457,
+          "name": "e2e-native-pi",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640379457",
+          "head_sha": "105b84dd95c73eccb3eab83a2c199e0c1413b1f4",
+          "created_at": "2026-11-09T15:01:15Z"
+        },
+        {
+          "id": 42640379266,
+          "name": "PR Build Artifact",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640379266",
+          "head_sha": "105b84dd95c73eccb3eab83a2c199e0c1413b1f4",
+          "created_at": "2026-11-09T15:01:15Z"
+        },
+        {
+          "id": 42640379236,
+          "name": "E2E (real codex)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640379236",
+          "head_sha": "105b84dd95c73eccb3eab83a2c199e0c1413b1f4",
+          "created_at": "2026-11-09T15:01:15Z"
+        },
+        {
+          "id": 42640379326,
+          "name": "e2e-fake-codex",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640379326",
+          "head_sha": "105b84dd95c73eccb3eab83a2c199e0c1413b1f4",
+          "created_at": "2026-11-09T15:01:15Z"
+        },
+        {
+          "id": 42640379296,
+          "name": "e2e-codex-persona",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640379296",
+          "head_sha": "105b84dd95c73eccb3eab83a2c199e0c1413b1f4",
+          "created_at": "2026-11-09T15:01:15Z"
         },
         {
           "id": 42640379320,
@@ -1041,7 +1193,8 @@
           "status": "completed",
           "conclusion": "success",
           "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640379320",
-          "head_sha": "105b84dd95c73eccb3eab83a2c199e0c1413b1f4"
+          "head_sha": "105b84dd95c73eccb3eab83a2c199e0c1413b1f4",
+          "created_at": "2026-11-09T15:01:15Z"
         },
         {
           "id": 42640379131,
@@ -1049,11 +1202,22 @@
           "status": "completed",
           "conclusion": "success",
           "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640379131",
-          "head_sha": "105b84dd95c73eccb3eab83a2c199e0c1413b1f4"
+          "head_sha": "105b84dd95c73eccb3eab83a2c199e0c1413b1f4",
+          "created_at": "2026-11-09T15:01:14Z"
         }
       ],
       "publication_status": "upstream_pr_open",
-      "source_tested_sha": "105b84dd95c73eccb3eab83a2c199e0c1413b1f4"
+      "source_tested_sha": "105b84dd95c73eccb3eab83a2c199e0c1413b1f4",
+      "latest_primary_ci": {
+        "id": 42640379320,
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640379320",
+        "head_sha": "105b84dd95c73eccb3eab83a2c199e0c1413b1f4",
+        "verified_at": "2026-11-09T16:14:26Z"
+      },
+      "review_threads_checked_at": "2026-11-09T16:14:26Z",
+      "open_review_threads": 0
     },
     {
       "number": 8,
@@ -1099,89 +1263,344 @@
         "head": "55db71ddf8bab6c063b146c90f58ada35213414a",
         "issue": 6043,
         "issue_url": "https://github.com/ranxianglei/billion-context/issues/6043",
-        "merged_at": null
+        "merged_at": null,
+        "mergeable": true,
+        "verified_at": "2026-11-09T16:14:26Z"
       },
       "issue_url": "https://github.com/ranxianglei/billion-context/issues/6043",
       "upstream_workflow_runs": [
         {
-          "id": 42640389578,
-          "name": "e2e-fake-codex",
-          "status": "completed",
-          "conclusion": "success",
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640389578",
-          "head_sha": "435d2d3e5b6670b58dca336793ac97361a6e2e02"
-        },
-        {
-          "id": 42640389527,
-          "name": "CI",
-          "status": "queued",
-          "conclusion": null,
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640389527",
-          "head_sha": "435d2d3e5b6670b58dca336793ac97361a6e2e02"
-        },
-        {
-          "id": 42640389649,
-          "name": "e2e-native-dsh",
-          "status": "completed",
-          "conclusion": "success",
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640389649",
-          "head_sha": "435d2d3e5b6670b58dca336793ac97361a6e2e02"
-        },
-        {
-          "id": 42640389575,
-          "name": "e2e-native-opencode",
-          "status": "completed",
-          "conclusion": "success",
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640389575",
-          "head_sha": "435d2d3e5b6670b58dca336793ac97361a6e2e02"
-        },
-        {
-          "id": 42640389688,
-          "name": "CI Windows codex overlay (#686)",
-          "status": "completed",
-          "conclusion": "success",
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640389688",
-          "head_sha": "435d2d3e5b6670b58dca336793ac97361a6e2e02"
-        },
-        {
-          "id": 42640389600,
-          "name": "e2e-native-pi",
-          "status": "completed",
-          "conclusion": "success",
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640389600",
-          "head_sha": "435d2d3e5b6670b58dca336793ac97361a6e2e02"
-        },
-        {
-          "id": 42640389529,
-          "name": "PR Build Artifact",
-          "status": "completed",
-          "conclusion": "success",
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640389529",
-          "head_sha": "435d2d3e5b6670b58dca336793ac97361a6e2e02"
-        },
-        {
-          "id": 42640389485,
-          "name": "e2e-pi-codex-ws",
-          "status": "completed",
-          "conclusion": "success",
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640389485",
-          "head_sha": "435d2d3e5b6670b58dca336793ac97361a6e2e02"
-        },
-        {
-          "id": 42640389508,
-          "name": "e2e-local-registry",
-          "status": "completed",
-          "conclusion": "success",
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640389508",
-          "head_sha": "435d2d3e5b6670b58dca336793ac97361a6e2e02"
-        },
-        {
-          "id": 42640389491,
+          "id": 42648807763,
           "name": "e2e-codex-persona",
           "status": "completed",
           "conclusion": "success",
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640389491",
-          "head_sha": "435d2d3e5b6670b58dca336793ac97361a6e2e02"
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42648807763",
+          "head_sha": "55db71ddf8bab6c063b146c90f58ada35213414a",
+          "created_at": "2026-11-09T15:51:10Z"
+        },
+        {
+          "id": 42648808575,
+          "name": "e2e-native-dsh",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42648808575",
+          "head_sha": "55db71ddf8bab6c063b146c90f58ada35213414a",
+          "created_at": "2026-11-09T15:51:10Z"
+        },
+        {
+          "id": 42648808591,
+          "name": "e2e-pi-codex-ws",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42648808591",
+          "head_sha": "55db71ddf8bab6c063b146c90f58ada35213414a",
+          "created_at": "2026-11-09T15:51:10Z"
+        },
+        {
+          "id": 42648807968,
+          "name": "e2e-fake-codex",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42648807968",
+          "head_sha": "55db71ddf8bab6c063b146c90f58ada35213414a",
+          "created_at": "2026-11-09T15:51:10Z"
+        },
+        {
+          "id": 42648807779,
+          "name": "e2e-native-opencode",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42648807779",
+          "head_sha": "55db71ddf8bab6c063b146c90f58ada35213414a",
+          "created_at": "2026-11-09T15:51:10Z"
+        },
+        {
+          "id": 42648807836,
+          "name": "CI",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42648807836",
+          "head_sha": "55db71ddf8bab6c063b146c90f58ada35213414a",
+          "created_at": "2026-11-09T15:51:10Z"
+        },
+        {
+          "id": 42648806960,
+          "name": "e2e-pi-codex-ws",
+          "status": "completed",
+          "conclusion": "cancelled",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42648806960",
+          "head_sha": "55db71ddf8bab6c063b146c90f58ada35213414a",
+          "created_at": "2026-11-09T15:51:09Z"
+        },
+        {
+          "id": 42648806934,
+          "name": "CI Windows codex overlay (#686)",
+          "status": "completed",
+          "conclusion": "cancelled",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42648806934",
+          "head_sha": "55db71ddf8bab6c063b146c90f58ada35213414a",
+          "created_at": "2026-11-09T15:51:09Z"
+        },
+        {
+          "id": 42648806427,
+          "name": "e2e-codex-persona",
+          "status": "completed",
+          "conclusion": "cancelled",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42648806427",
+          "head_sha": "55db71ddf8bab6c063b146c90f58ada35213414a",
+          "created_at": "2026-11-09T15:51:09Z"
+        },
+        {
+          "id": 42648806714,
+          "name": "e2e-pi-codex-ws",
+          "status": "completed",
+          "conclusion": "cancelled",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42648806714",
+          "head_sha": "55db71ddf8bab6c063b146c90f58ada35213414a",
+          "created_at": "2026-11-09T15:51:09Z"
+        },
+        {
+          "id": 42648806563,
+          "name": "e2e-local-registry",
+          "status": "completed",
+          "conclusion": "cancelled",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42648806563",
+          "head_sha": "55db71ddf8bab6c063b146c90f58ada35213414a",
+          "created_at": "2026-11-09T15:51:09Z"
+        },
+        {
+          "id": 42648806536,
+          "name": "e2e-fake-codex",
+          "status": "completed",
+          "conclusion": "cancelled",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42648806536",
+          "head_sha": "55db71ddf8bab6c063b146c90f58ada35213414a",
+          "created_at": "2026-11-09T15:51:09Z"
+        },
+        {
+          "id": 42648806431,
+          "name": "e2e-native-dsh",
+          "status": "completed",
+          "conclusion": "cancelled",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42648806431",
+          "head_sha": "55db71ddf8bab6c063b146c90f58ada35213414a",
+          "created_at": "2026-11-09T15:51:09Z"
+        },
+        {
+          "id": 42648806741,
+          "name": "e2e-native-opencode",
+          "status": "completed",
+          "conclusion": "cancelled",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42648806741",
+          "head_sha": "55db71ddf8bab6c063b146c90f58ada35213414a",
+          "created_at": "2026-11-09T15:51:09Z"
+        },
+        {
+          "id": 42648806631,
+          "name": "e2e-fake-codex",
+          "status": "completed",
+          "conclusion": "cancelled",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42648806631",
+          "head_sha": "55db71ddf8bab6c063b146c90f58ada35213414a",
+          "created_at": "2026-11-09T15:51:09Z"
+        },
+        {
+          "id": 42648806728,
+          "name": "CI Windows codex overlay (#686)",
+          "status": "completed",
+          "conclusion": "cancelled",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42648806728",
+          "head_sha": "55db71ddf8bab6c063b146c90f58ada35213414a",
+          "created_at": "2026-11-09T15:51:09Z"
+        },
+        {
+          "id": 42648806695,
+          "name": "e2e-native-opencode",
+          "status": "completed",
+          "conclusion": "cancelled",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42648806695",
+          "head_sha": "55db71ddf8bab6c063b146c90f58ada35213414a",
+          "created_at": "2026-11-09T15:51:09Z"
+        },
+        {
+          "id": 42648806538,
+          "name": "e2e-codex-persona",
+          "status": "completed",
+          "conclusion": "cancelled",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42648806538",
+          "head_sha": "55db71ddf8bab6c063b146c90f58ada35213414a",
+          "created_at": "2026-11-09T15:51:09Z"
+        },
+        {
+          "id": 42648806742,
+          "name": "e2e-local-registry",
+          "status": "completed",
+          "conclusion": "cancelled",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42648806742",
+          "head_sha": "55db71ddf8bab6c063b146c90f58ada35213414a",
+          "created_at": "2026-11-09T15:51:09Z"
+        },
+        {
+          "id": 42648806594,
+          "name": "e2e-native-dsh",
+          "status": "completed",
+          "conclusion": "cancelled",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42648806594",
+          "head_sha": "55db71ddf8bab6c063b146c90f58ada35213414a",
+          "created_at": "2026-11-09T15:51:09Z"
+        },
+        {
+          "id": 42648806549,
+          "name": "CI",
+          "status": "completed",
+          "conclusion": "cancelled",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42648806549",
+          "head_sha": "55db71ddf8bab6c063b146c90f58ada35213414a",
+          "created_at": "2026-11-09T15:51:09Z"
+        },
+        {
+          "id": 42648806580,
+          "name": "e2e-native-pi",
+          "status": "completed",
+          "conclusion": "cancelled",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42648806580",
+          "head_sha": "55db71ddf8bab6c063b146c90f58ada35213414a",
+          "created_at": "2026-11-09T15:51:09Z"
+        },
+        {
+          "id": 42648806692,
+          "name": "CI",
+          "status": "completed",
+          "conclusion": "cancelled",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42648806692",
+          "head_sha": "55db71ddf8bab6c063b146c90f58ada35213414a",
+          "created_at": "2026-11-09T15:51:09Z"
+        },
+        {
+          "id": 42648806770,
+          "name": "e2e-native-pi",
+          "status": "completed",
+          "conclusion": "cancelled",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42648806770",
+          "head_sha": "55db71ddf8bab6c063b146c90f58ada35213414a",
+          "created_at": "2026-11-09T15:51:09Z"
+        },
+        {
+          "id": 42648807706,
+          "name": "CI Windows codex overlay (#686)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42648807706",
+          "head_sha": "55db71ddf8bab6c063b146c90f58ada35213414a",
+          "created_at": "2026-11-09T15:51:09Z"
+        },
+        {
+          "id": 42648807680,
+          "name": "e2e-local-registry",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42648807680",
+          "head_sha": "55db71ddf8bab6c063b146c90f58ada35213414a",
+          "created_at": "2026-11-09T15:51:09Z"
+        },
+        {
+          "id": 42648807525,
+          "name": "e2e-native-pi",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42648807525",
+          "head_sha": "55db71ddf8bab6c063b146c90f58ada35213414a",
+          "created_at": "2026-11-09T15:51:09Z"
+        },
+        {
+          "id": 42647905328,
+          "name": "e2e-codex-persona",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42647905328",
+          "head_sha": "55db71ddf8bab6c063b146c90f58ada35213414a",
+          "created_at": "2026-11-09T15:45:46Z"
+        },
+        {
+          "id": 42647905482,
+          "name": "e2e-native-pi",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42647905482",
+          "head_sha": "55db71ddf8bab6c063b146c90f58ada35213414a",
+          "created_at": "2026-11-09T15:45:46Z"
+        },
+        {
+          "id": 42647905311,
+          "name": "e2e-native-dsh",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42647905311",
+          "head_sha": "55db71ddf8bab6c063b146c90f58ada35213414a",
+          "created_at": "2026-11-09T15:45:46Z"
+        },
+        {
+          "id": 42647905499,
+          "name": "e2e-fake-codex",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42647905499",
+          "head_sha": "55db71ddf8bab6c063b146c90f58ada35213414a",
+          "created_at": "2026-11-09T15:45:46Z"
+        },
+        {
+          "id": 42647905450,
+          "name": "PR Build Artifact",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42647905450",
+          "head_sha": "55db71ddf8bab6c063b146c90f58ada35213414a",
+          "created_at": "2026-11-09T15:45:46Z"
+        },
+        {
+          "id": 42647905304,
+          "name": "CI Windows codex overlay (#686)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42647905304",
+          "head_sha": "55db71ddf8bab6c063b146c90f58ada35213414a",
+          "created_at": "2026-11-09T15:45:46Z"
+        },
+        {
+          "id": 42647905322,
+          "name": "CI",
+          "status": "queued",
+          "conclusion": null,
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42647905322",
+          "head_sha": "55db71ddf8bab6c063b146c90f58ada35213414a",
+          "created_at": "2026-11-09T15:45:46Z"
+        },
+        {
+          "id": 42647905548,
+          "name": "e2e-native-opencode",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42647905548",
+          "head_sha": "55db71ddf8bab6c063b146c90f58ada35213414a",
+          "created_at": "2026-11-09T15:45:46Z"
+        },
+        {
+          "id": 42647905520,
+          "name": "e2e-local-registry",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42647905520",
+          "head_sha": "55db71ddf8bab6c063b146c90f58ada35213414a",
+          "created_at": "2026-11-09T15:45:46Z"
+        },
+        {
+          "id": 42647905380,
+          "name": "e2e-pi-codex-ws",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42647905380",
+          "head_sha": "55db71ddf8bab6c063b146c90f58ada35213414a",
+          "created_at": "2026-11-09T15:45:46Z"
         }
       ],
       "publication_status": "upstream_pr_open",
@@ -1196,7 +1615,17 @@
         "change": "Only the noteColdLoad contract comment explains why missing or invalid timestamps disarm pending alarms.",
         "compare": "https://github.com/Afloat16/billion-context/compare/435d2d3e5b6670b58dca336793ac97361a6e2e02...55db71ddf8bab6c063b146c90f58ada35213414a",
         "behavior_unchanged": true
-      }
+      },
+      "latest_primary_ci": {
+        "id": 42648807836,
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/ranxianglei/billion-context/actions/runs/42648807836",
+        "head_sha": "55db71ddf8bab6c063b146c90f58ada35213414a",
+        "verified_at": "2026-11-09T16:14:26Z"
+      },
+      "review_threads_checked_at": "2026-11-09T16:14:26Z",
+      "open_review_threads": 0
     },
     {
       "number": 9,
@@ -1242,337 +1671,200 @@
         "head": "168e8ca1cd76dd980ba485251412d06aba919156",
         "issue": 6044,
         "issue_url": "https://github.com/ranxianglei/billion-context/issues/6044",
-        "merged_at": null
+        "merged_at": null,
+        "mergeable": true,
+        "verified_at": "2026-11-09T16:14:26Z"
       },
       "issue_url": "https://github.com/ranxianglei/billion-context/issues/6044",
       "upstream_workflow_runs": [
         {
-          "id": 42643666159,
-          "name": "e2e-native-pi",
-          "status": "completed",
-          "conclusion": "success",
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42643666159",
-          "head_sha": "ffb5a3dcf0ecbf07a6d28e3db54a64bd05193fa8"
-        },
-        {
-          "id": 42643665016,
-          "name": "CI",
-          "status": "queued",
-          "conclusion": null,
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42643665016",
-          "head_sha": "ffb5a3dcf0ecbf07a6d28e3db54a64bd05193fa8"
-        },
-        {
-          "id": 42643664575,
-          "name": "e2e-native-opencode",
-          "status": "completed",
-          "conclusion": "success",
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42643664575",
-          "head_sha": "ffb5a3dcf0ecbf07a6d28e3db54a64bd05193fa8"
-        },
-        {
-          "id": 42643664694,
-          "name": "e2e-codex-persona",
-          "status": "completed",
-          "conclusion": "success",
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42643664694",
-          "head_sha": "ffb5a3dcf0ecbf07a6d28e3db54a64bd05193fa8"
-        },
-        {
-          "id": 42643665599,
-          "name": "e2e-local-registry",
-          "status": "completed",
-          "conclusion": "success",
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42643665599",
-          "head_sha": "ffb5a3dcf0ecbf07a6d28e3db54a64bd05193fa8"
-        },
-        {
-          "id": 42643664375,
-          "name": "e2e-pi-codex-ws",
-          "status": "completed",
-          "conclusion": "success",
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42643664375",
-          "head_sha": "ffb5a3dcf0ecbf07a6d28e3db54a64bd05193fa8"
-        },
-        {
-          "id": 42643664457,
-          "name": "e2e-native-dsh",
-          "status": "completed",
-          "conclusion": "success",
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42643664457",
-          "head_sha": "ffb5a3dcf0ecbf07a6d28e3db54a64bd05193fa8"
-        },
-        {
-          "id": 42643664608,
-          "name": "E2E (real codex)",
-          "status": "completed",
-          "conclusion": "success",
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42643664608",
-          "head_sha": "ffb5a3dcf0ecbf07a6d28e3db54a64bd05193fa8"
-        },
-        {
-          "id": 42643665213,
-          "name": "CI Windows codex overlay (#686)",
-          "status": "completed",
-          "conclusion": "success",
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42643665213",
-          "head_sha": "ffb5a3dcf0ecbf07a6d28e3db54a64bd05193fa8"
-        },
-        {
-          "id": 42643665010,
+          "id": 42646319263,
           "name": "e2e-fake-codex",
           "status": "completed",
           "conclusion": "success",
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42643665010",
-          "head_sha": "ffb5a3dcf0ecbf07a6d28e3db54a64bd05193fa8"
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42646319263",
+          "head_sha": "168e8ca1cd76dd980ba485251412d06aba919156",
+          "created_at": "2026-11-09T15:36:11Z"
         },
         {
-          "id": 42643661476,
-          "name": "e2e-native-opencode",
-          "status": "completed",
-          "conclusion": "cancelled",
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42643661476",
-          "head_sha": "ffb5a3dcf0ecbf07a6d28e3db54a64bd05193fa8"
-        },
-        {
-          "id": 42643661505,
-          "name": "E2E (real codex)",
-          "status": "completed",
-          "conclusion": "cancelled",
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42643661505",
-          "head_sha": "ffb5a3dcf0ecbf07a6d28e3db54a64bd05193fa8"
-        },
-        {
-          "id": 42643661157,
-          "name": "e2e-local-registry",
-          "status": "completed",
-          "conclusion": "cancelled",
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42643661157",
-          "head_sha": "ffb5a3dcf0ecbf07a6d28e3db54a64bd05193fa8"
-        },
-        {
-          "id": 42643661437,
-          "name": "e2e-native-pi",
-          "status": "completed",
-          "conclusion": "cancelled",
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42643661437",
-          "head_sha": "ffb5a3dcf0ecbf07a6d28e3db54a64bd05193fa8"
-        },
-        {
-          "id": 42643661797,
-          "name": "CI Windows codex overlay (#686)",
-          "status": "completed",
-          "conclusion": "cancelled",
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42643661797",
-          "head_sha": "ffb5a3dcf0ecbf07a6d28e3db54a64bd05193fa8"
-        },
-        {
-          "id": 42643661587,
-          "name": "CI Windows codex overlay (#686)",
-          "status": "completed",
-          "conclusion": "cancelled",
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42643661587",
-          "head_sha": "ffb5a3dcf0ecbf07a6d28e3db54a64bd05193fa8"
-        },
-        {
-          "id": 42643661159,
-          "name": "e2e-fake-codex",
-          "status": "completed",
-          "conclusion": "cancelled",
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42643661159",
-          "head_sha": "ffb5a3dcf0ecbf07a6d28e3db54a64bd05193fa8"
-        },
-        {
-          "id": 42643661397,
-          "name": "e2e-codex-persona",
-          "status": "completed",
-          "conclusion": "cancelled",
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42643661397",
-          "head_sha": "ffb5a3dcf0ecbf07a6d28e3db54a64bd05193fa8"
-        },
-        {
-          "id": 42643661308,
+          "id": 42646319257,
           "name": "e2e-native-dsh",
           "status": "completed",
-          "conclusion": "cancelled",
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42643661308",
-          "head_sha": "ffb5a3dcf0ecbf07a6d28e3db54a64bd05193fa8"
+          "conclusion": "success",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42646319257",
+          "head_sha": "168e8ca1cd76dd980ba485251412d06aba919156",
+          "created_at": "2026-11-09T15:36:11Z"
         },
         {
-          "id": 42643661812,
-          "name": "CI",
-          "status": "completed",
-          "conclusion": "cancelled",
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42643661812",
-          "head_sha": "ffb5a3dcf0ecbf07a6d28e3db54a64bd05193fa8"
-        },
-        {
-          "id": 42643661295,
-          "name": "e2e-fake-codex",
-          "status": "completed",
-          "conclusion": "cancelled",
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42643661295",
-          "head_sha": "ffb5a3dcf0ecbf07a6d28e3db54a64bd05193fa8"
-        },
-        {
-          "id": 42643661306,
-          "name": "e2e-native-pi",
-          "status": "completed",
-          "conclusion": "cancelled",
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42643661306",
-          "head_sha": "ffb5a3dcf0ecbf07a6d28e3db54a64bd05193fa8"
-        },
-        {
-          "id": 42643661662,
-          "name": "e2e-native-opencode",
-          "status": "completed",
-          "conclusion": "cancelled",
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42643661662",
-          "head_sha": "ffb5a3dcf0ecbf07a6d28e3db54a64bd05193fa8"
-        },
-        {
-          "id": 42643661588,
-          "name": "e2e-native-dsh",
-          "status": "completed",
-          "conclusion": "cancelled",
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42643661588",
-          "head_sha": "ffb5a3dcf0ecbf07a6d28e3db54a64bd05193fa8"
-        },
-        {
-          "id": 42643661485,
-          "name": "e2e-pi-codex-ws",
-          "status": "completed",
-          "conclusion": "cancelled",
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42643661485",
-          "head_sha": "ffb5a3dcf0ecbf07a6d28e3db54a64bd05193fa8"
-        },
-        {
-          "id": 42643661994,
-          "name": "e2e-pi-codex-ws",
-          "status": "completed",
-          "conclusion": "cancelled",
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42643661994",
-          "head_sha": "ffb5a3dcf0ecbf07a6d28e3db54a64bd05193fa8"
-        },
-        {
-          "id": 42643661537,
-          "name": "E2E (real codex)",
-          "status": "completed",
-          "conclusion": "cancelled",
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42643661537",
-          "head_sha": "ffb5a3dcf0ecbf07a6d28e3db54a64bd05193fa8"
-        },
-        {
-          "id": 42643661063,
-          "name": "e2e-local-registry",
-          "status": "completed",
-          "conclusion": "cancelled",
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42643661063",
-          "head_sha": "ffb5a3dcf0ecbf07a6d28e3db54a64bd05193fa8"
-        },
-        {
-          "id": 42643661168,
-          "name": "CI",
-          "status": "completed",
-          "conclusion": "cancelled",
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42643661168",
-          "head_sha": "ffb5a3dcf0ecbf07a6d28e3db54a64bd05193fa8"
-        },
-        {
-          "id": 42643660819,
+          "id": 42646319082,
           "name": "e2e-codex-persona",
           "status": "completed",
-          "conclusion": "cancelled",
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42643660819",
-          "head_sha": "ffb5a3dcf0ecbf07a6d28e3db54a64bd05193fa8"
+          "conclusion": "success",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42646319082",
+          "head_sha": "168e8ca1cd76dd980ba485251412d06aba919156",
+          "created_at": "2026-11-09T15:36:11Z"
         },
         {
-          "id": 42640518135,
+          "id": 42646319102,
+          "name": "e2e-local-registry",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42646319102",
+          "head_sha": "168e8ca1cd76dd980ba485251412d06aba919156",
+          "created_at": "2026-11-09T15:36:11Z"
+        },
+        {
+          "id": 42646318991,
+          "name": "e2e-native-pi",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42646318991",
+          "head_sha": "168e8ca1cd76dd980ba485251412d06aba919156",
+          "created_at": "2026-11-09T15:36:11Z"
+        },
+        {
+          "id": 42646319127,
+          "name": "E2E (real codex)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42646319127",
+          "head_sha": "168e8ca1cd76dd980ba485251412d06aba919156",
+          "created_at": "2026-11-09T15:36:11Z"
+        },
+        {
+          "id": 42646318999,
+          "name": "CI Windows codex overlay (#686)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42646318999",
+          "head_sha": "168e8ca1cd76dd980ba485251412d06aba919156",
+          "created_at": "2026-11-09T15:36:11Z"
+        },
+        {
+          "id": 42646319174,
+          "name": "e2e-pi-codex-ws",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42646319174",
+          "head_sha": "168e8ca1cd76dd980ba485251412d06aba919156",
+          "created_at": "2026-11-09T15:36:11Z"
+        },
+        {
+          "id": 42646319048,
+          "name": "e2e-native-opencode",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42646319048",
+          "head_sha": "168e8ca1cd76dd980ba485251412d06aba919156",
+          "created_at": "2026-11-09T15:36:11Z"
+        },
+        {
+          "id": 42646319109,
+          "name": "CI",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42646319109",
+          "head_sha": "168e8ca1cd76dd980ba485251412d06aba919156",
+          "created_at": "2026-11-09T15:36:11Z"
+        },
+        {
+          "id": 42645679734,
+          "name": "e2e-pi-codex-ws",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42645679734",
+          "head_sha": "168e8ca1cd76dd980ba485251412d06aba919156",
+          "created_at": "2026-11-09T15:32:24Z"
+        },
+        {
+          "id": 42645679822,
+          "name": "e2e-codex-persona",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42645679822",
+          "head_sha": "168e8ca1cd76dd980ba485251412d06aba919156",
+          "created_at": "2026-11-09T15:32:24Z"
+        },
+        {
+          "id": 42645679917,
+          "name": "e2e-native-dsh",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42645679917",
+          "head_sha": "168e8ca1cd76dd980ba485251412d06aba919156",
+          "created_at": "2026-11-09T15:32:24Z"
+        },
+        {
+          "id": 42645679714,
+          "name": "CI Windows codex overlay (#686)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42645679714",
+          "head_sha": "168e8ca1cd76dd980ba485251412d06aba919156",
+          "created_at": "2026-11-09T15:32:24Z"
+        },
+        {
+          "id": 42645679519,
+          "name": "e2e-fake-codex",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42645679519",
+          "head_sha": "168e8ca1cd76dd980ba485251412d06aba919156",
+          "created_at": "2026-11-09T15:32:24Z"
+        },
+        {
+          "id": 42645679677,
+          "name": "e2e-local-registry",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42645679677",
+          "head_sha": "168e8ca1cd76dd980ba485251412d06aba919156",
+          "created_at": "2026-11-09T15:32:24Z"
+        },
+        {
+          "id": 42645679516,
+          "name": "e2e-native-opencode",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42645679516",
+          "head_sha": "168e8ca1cd76dd980ba485251412d06aba919156",
+          "created_at": "2026-11-09T15:32:24Z"
+        },
+        {
+          "id": 42645679477,
+          "name": "E2E (real codex)",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42645679477",
+          "head_sha": "168e8ca1cd76dd980ba485251412d06aba919156",
+          "created_at": "2026-11-09T15:32:24Z"
+        },
+        {
+          "id": 42645679402,
           "name": "PR Build Artifact",
           "status": "completed",
           "conclusion": "success",
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640518135",
-          "head_sha": "ffb5a3dcf0ecbf07a6d28e3db54a64bd05193fa8"
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42645679402",
+          "head_sha": "168e8ca1cd76dd980ba485251412d06aba919156",
+          "created_at": "2026-11-09T15:32:24Z"
         },
         {
-          "id": 42640517895,
-          "name": "E2E (real codex)",
-          "status": "completed",
-          "conclusion": "success",
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640517895",
-          "head_sha": "ffb5a3dcf0ecbf07a6d28e3db54a64bd05193fa8"
-        },
-        {
-          "id": 42640518170,
-          "name": "e2e-native-dsh",
-          "status": "completed",
-          "conclusion": "success",
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640518170",
-          "head_sha": "ffb5a3dcf0ecbf07a6d28e3db54a64bd05193fa8"
-        },
-        {
-          "id": 42640518239,
-          "name": "e2e-fake-codex",
-          "status": "completed",
-          "conclusion": "success",
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640518239",
-          "head_sha": "ffb5a3dcf0ecbf07a6d28e3db54a64bd05193fa8"
-        },
-        {
-          "id": 42640518137,
-          "name": "e2e-local-registry",
-          "status": "completed",
-          "conclusion": "success",
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640518137",
-          "head_sha": "ffb5a3dcf0ecbf07a6d28e3db54a64bd05193fa8"
-        },
-        {
-          "id": 42640518132,
-          "name": "CI",
-          "status": "completed",
-          "conclusion": "cancelled",
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640518132",
-          "head_sha": "ffb5a3dcf0ecbf07a6d28e3db54a64bd05193fa8"
-        },
-        {
-          "id": 42640517839,
+          "id": 42645679633,
           "name": "e2e-native-pi",
           "status": "completed",
           "conclusion": "success",
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640517839",
-          "head_sha": "ffb5a3dcf0ecbf07a6d28e3db54a64bd05193fa8"
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42645679633",
+          "head_sha": "168e8ca1cd76dd980ba485251412d06aba919156",
+          "created_at": "2026-11-09T15:32:24Z"
         },
         {
-          "id": 42640517838,
-          "name": "e2e-codex-persona",
-          "status": "completed",
-          "conclusion": "success",
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640517838",
-          "head_sha": "ffb5a3dcf0ecbf07a6d28e3db54a64bd05193fa8"
-        },
-        {
-          "id": 42640517840,
-          "name": "e2e-pi-codex-ws",
-          "status": "completed",
-          "conclusion": "success",
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640517840",
-          "head_sha": "ffb5a3dcf0ecbf07a6d28e3db54a64bd05193fa8"
-        },
-        {
-          "id": 42640517846,
-          "name": "CI Windows codex overlay (#686)",
-          "status": "completed",
-          "conclusion": "success",
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640517846",
-          "head_sha": "ffb5a3dcf0ecbf07a6d28e3db54a64bd05193fa8"
-        },
-        {
-          "id": 42640517843,
-          "name": "e2e-native-opencode",
-          "status": "completed",
-          "conclusion": "success",
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640517843",
-          "head_sha": "ffb5a3dcf0ecbf07a6d28e3db54a64bd05193fa8"
+          "id": 42645679661,
+          "name": "CI",
+          "status": "in_progress",
+          "conclusion": null,
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42645679661",
+          "head_sha": "168e8ca1cd76dd980ba485251412d06aba919156",
+          "created_at": "2026-11-09T15:32:24Z"
         }
       ],
       "publication_status": "upstream_pr_open",
@@ -1587,7 +1879,17 @@
         "change": "One-line comment clarifies single-entry LRU eviction; no executable change.",
         "compare": "https://github.com/Afloat16/billion-context/compare/ffb5a3dcf0ecbf07a6d28e3db54a64bd05193fa8...168e8ca1cd76dd980ba485251412d06aba919156",
         "behavior_unchanged": true
-      }
+      },
+      "latest_primary_ci": {
+        "id": 42646319109,
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/ranxianglei/billion-context/actions/runs/42646319109",
+        "head_sha": "168e8ca1cd76dd980ba485251412d06aba919156",
+        "verified_at": "2026-11-09T16:14:26Z"
+      },
+      "review_threads_checked_at": "2026-11-09T16:14:26Z",
+      "open_review_threads": 0
     },
     {
       "number": 10,
@@ -1633,7 +1935,9 @@
         "head": "6b0cb61a6ce69241faff00164e9195c85bb4e9fc",
         "issue": 6045,
         "issue_url": "https://github.com/ranxianglei/billion-context/issues/6045",
-        "merged_at": null
+        "merged_at": null,
+        "mergeable": true,
+        "verified_at": "2026-11-09T16:14:26Z"
       },
       "issue_url": "https://github.com/ranxianglei/billion-context/issues/6045",
       "upstream_workflow_runs": [
@@ -1643,15 +1947,8 @@
           "status": "completed",
           "conclusion": "success",
           "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640540381",
-          "head_sha": "6b0cb61a6ce69241faff00164e9195c85bb4e9fc"
-        },
-        {
-          "id": 42640537837,
-          "name": "CI",
-          "status": "queued",
-          "conclusion": null,
-          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640537837",
-          "head_sha": "6b0cb61a6ce69241faff00164e9195c85bb4e9fc"
+          "head_sha": "6b0cb61a6ce69241faff00164e9195c85bb4e9fc",
+          "created_at": "2026-11-09T15:02:12Z"
         },
         {
           "id": 42640537510,
@@ -1659,7 +1956,8 @@
           "status": "completed",
           "conclusion": "success",
           "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640537510",
-          "head_sha": "6b0cb61a6ce69241faff00164e9195c85bb4e9fc"
+          "head_sha": "6b0cb61a6ce69241faff00164e9195c85bb4e9fc",
+          "created_at": "2026-11-09T15:02:11Z"
         },
         {
           "id": 42640537369,
@@ -1667,7 +1965,8 @@
           "status": "completed",
           "conclusion": "success",
           "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640537369",
-          "head_sha": "6b0cb61a6ce69241faff00164e9195c85bb4e9fc"
+          "head_sha": "6b0cb61a6ce69241faff00164e9195c85bb4e9fc",
+          "created_at": "2026-11-09T15:02:11Z"
         },
         {
           "id": 42640537354,
@@ -1675,7 +1974,8 @@
           "status": "completed",
           "conclusion": "success",
           "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640537354",
-          "head_sha": "6b0cb61a6ce69241faff00164e9195c85bb4e9fc"
+          "head_sha": "6b0cb61a6ce69241faff00164e9195c85bb4e9fc",
+          "created_at": "2026-11-09T15:02:11Z"
         },
         {
           "id": 42640537463,
@@ -1683,7 +1983,8 @@
           "status": "completed",
           "conclusion": "success",
           "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640537463",
-          "head_sha": "6b0cb61a6ce69241faff00164e9195c85bb4e9fc"
+          "head_sha": "6b0cb61a6ce69241faff00164e9195c85bb4e9fc",
+          "created_at": "2026-11-09T15:02:11Z"
         },
         {
           "id": 42640537563,
@@ -1691,7 +1992,8 @@
           "status": "completed",
           "conclusion": "success",
           "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640537563",
-          "head_sha": "6b0cb61a6ce69241faff00164e9195c85bb4e9fc"
+          "head_sha": "6b0cb61a6ce69241faff00164e9195c85bb4e9fc",
+          "created_at": "2026-11-09T15:02:11Z"
         },
         {
           "id": 42640537657,
@@ -1699,7 +2001,8 @@
           "status": "completed",
           "conclusion": "success",
           "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640537657",
-          "head_sha": "6b0cb61a6ce69241faff00164e9195c85bb4e9fc"
+          "head_sha": "6b0cb61a6ce69241faff00164e9195c85bb4e9fc",
+          "created_at": "2026-11-09T15:02:11Z"
         },
         {
           "id": 42640537508,
@@ -1707,7 +2010,8 @@
           "status": "completed",
           "conclusion": "success",
           "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640537508",
-          "head_sha": "6b0cb61a6ce69241faff00164e9195c85bb4e9fc"
+          "head_sha": "6b0cb61a6ce69241faff00164e9195c85bb4e9fc",
+          "created_at": "2026-11-09T15:02:11Z"
         },
         {
           "id": 42640537595,
@@ -1715,11 +2019,31 @@
           "status": "completed",
           "conclusion": "success",
           "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640537595",
-          "head_sha": "6b0cb61a6ce69241faff00164e9195c85bb4e9fc"
+          "head_sha": "6b0cb61a6ce69241faff00164e9195c85bb4e9fc",
+          "created_at": "2026-11-09T15:02:11Z"
+        },
+        {
+          "id": 42640537837,
+          "name": "CI",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640537837",
+          "head_sha": "6b0cb61a6ce69241faff00164e9195c85bb4e9fc",
+          "created_at": "2026-11-09T15:02:11Z"
         }
       ],
       "publication_status": "upstream_pr_open",
-      "source_tested_sha": "6b0cb61a6ce69241faff00164e9195c85bb4e9fc"
+      "source_tested_sha": "6b0cb61a6ce69241faff00164e9195c85bb4e9fc",
+      "latest_primary_ci": {
+        "id": 42640537837,
+        "status": "completed",
+        "conclusion": "success",
+        "url": "https://github.com/ranxianglei/billion-context/actions/runs/42640537837",
+        "head_sha": "6b0cb61a6ce69241faff00164e9195c85bb4e9fc",
+        "verified_at": "2026-11-09T16:14:26Z"
+      },
+      "review_threads_checked_at": "2026-11-09T16:14:26Z",
+      "open_review_threads": 0
     }
   ]
 }

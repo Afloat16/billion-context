@@ -40,21 +40,23 @@ export function hoistTrappedToolItems<T extends ToolPairItem>(items: T[]): T[] {
     }
     if (callPos.size === 0) return items;
 
-    // For each non-tool item p, find the earliest call c < p whose output o > p.
-    // Such an item is "trapped" between that call and its output.
+    // Calls enter in source order. Once the earliest call's output is behind
+    // the cursor it can never trap another item, so each pair is visited once.
+    const pairs: Array<{ call: number; output: number }> = [];
+    for (const [id, call] of callPos) {
+        const output = outPos.get(id);
+        if (output !== undefined && output > call) pairs.push({ call, output });
+    }
+    let first = 0;
     const hoistBefore = new Array<number | null>(n).fill(null);
     let anyTrapped = false;
     for (let p = 0; p < n; p++) {
         const t = items[p].type;
         if (isCall(t) || isOutput(t)) continue;
-        let target = -1;
-        for (const [id, c] of callPos) {
-            const o = outPos.get(id);
-            if (o === undefined || !(c < p && o > p)) continue;
-            if (target === -1 || c < target) target = c;
-        }
-        if (target >= 0) {
-            hoistBefore[p] = target;
+        while (first < pairs.length && pairs[first].output <= p) first += 1;
+        const pair = pairs[first];
+        if (pair !== undefined && pair.call < p) {
+            hoistBefore[p] = pair.call;
             anyTrapped = true;
         }
     }
@@ -73,7 +75,7 @@ export function hoistTrappedToolItems<T extends ToolPairItem>(items: T[]): T[] {
     for (let p = 0; p < n; p++) {
         if (hoistBefore[p] !== null) continue;
         const batch = pendingByTarget.get(p);
-        if (batch) result.push(...batch);
+        if (batch) for (const item of batch) result.push(item);
         result.push(items[p]);
     }
     return result;

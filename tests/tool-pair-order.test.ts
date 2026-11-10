@@ -106,3 +106,29 @@ test("short arrays are returned unchanged", () => {
     assert.deepEqual(hoistTrappedToolItems([msg("only")]), [msg("only")]);
     assert.deepEqual(hoistTrappedToolItems([fc("a"), fo("a")]), [fc("a"), fo("a")]);
 });
+
+test("a large trapped batch is hoisted without exceeding the call argument limit", () => {
+    const trapped = Array.from({ length: 150_000 }, (_, i) => msg(`marker ${i}`));
+    const call = fc("long");
+    const output = fo("long");
+    const input: Item[] = [call, ...trapped, output];
+    const out = hoistTrappedToolItems(input);
+    assert.equal(out.length, input.length);
+    for (let i = 0; i < trapped.length; i++) assert.strictEqual(out[i], trapped[i]);
+    assert.strictEqual(out.at(-2), call);
+    assert.strictEqual(out.at(-1), output);
+    assert.strictEqual(input[0], call);
+});
+
+test("overlapping pairs retain the earliest still-open call as their hoist target", () => {
+    const a = fc("a"), b = fc("b"), c = ct("c");
+    const first = msg("first"), second = msg("second"), third = reason();
+    const ao = fo("a"), bo = fo("b"), co = cto("c");
+    const input = [a, b, first, bo, c, second, ao, third, co];
+    assert.deepEqual(hoistTrappedToolItems(input), [first, second, a, b, bo, third, c, ao, co]);
+});
+
+test("completed pairs, orphan calls and outputs before their calls never trap later messages", () => {
+    const input: Item[] = [fo("early"), fc("early"), msg("one"), fc("orphan"), msg("two"), fc("done"), fo("done"), msg("three")];
+    assert.strictEqual(hoistTrappedToolItems(input), input);
+});

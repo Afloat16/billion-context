@@ -95,6 +95,30 @@ test("JSON: error field present → failed", async () => {
     assert.equal(await observeResponsesTerminalState(stream, false), "failed");
 });
 
+test("JSON: a null error does not turn a completed response into a failure", async () => {
+    const stream = sseStream([JSON.stringify({ status: "completed", error: null, output: [] })]);
+    assert.equal(await observeResponsesTerminalState(stream, false), "completed");
+});
+
+for (const status of ["incomplete", "failed", "cancelled"]) {
+    test(`JSON: ${status} with partial output does not complete compaction`, async () => {
+        const stream = sseStream([JSON.stringify({ status, output: [{ type: "message", content: "partial summary" }] })]);
+        assert.equal(await observeResponsesTerminalState(stream, false), "failed");
+    });
+}
+
+for (const status of ["queued", "in_progress", "unknown", null]) {
+    test(`JSON: ${status} is not a terminal success even with an output array`, async () => {
+        const stream = sseStream([JSON.stringify({ status, output: [] })]);
+        assert.equal(await observeResponsesTerminalState(stream, false), "unknown");
+    });
+}
+
+test("JSON: a compact endpoint's status-free output remains completed", async () => {
+    const stream = sseStream([JSON.stringify({ object: "response.compaction", output: [] })]);
+    assert.equal(await observeResponsesTerminalState(stream, false), "completed");
+});
+
 test("JSON: unparseable body → unknown", async () => {
     assert.equal(await observeResponsesTerminalState(sseStream(["<html>502 bad gateway</html>"]), false), "unknown");
 });

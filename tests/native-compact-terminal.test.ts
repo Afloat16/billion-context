@@ -59,6 +59,11 @@ test("e2e #321 PR-C: rebase only on completed; trigger request forwarded clean",
                     res.end();
                     return;
                 }
+                if (mode?.startsWith("json-status-")) {
+                    res.writeHead(200, { "content-type": "application/json" });
+                    res.end(JSON.stringify({ status: mode.slice("json-status-".length), error: null, output: [{ type: "message", role: "user", content: "summary" }] }));
+                    return;
+                }
                 res.writeHead(200, { "content-type": "application/json" });
                 res.end(JSON.stringify({ id: "resp_c", status: "completed", output: [{ type: "message", role: "user", content: "summary" }], usage: { input_tokens: 10, output_tokens: 1 } }));
                 return;
@@ -192,6 +197,15 @@ test("e2e #321 PR-C: rebase only on completed; trigger request forwarded clean",
         assert.equal(r6.status, 200);
         await r6.text();
         assert.equal(pendingRebase("term-jsonok"), true, "JSON output response schedules the rebase");
+
+        for (const status of ["incomplete", "failed", "cancelled", "queued", "in_progress", "completed"]) {
+            const session = `term-json-status-${status}`;
+            const response = await postResponses(`/responses/compact?mode=json-status-${status}`, { model: "gpt-resp", session_id: session });
+            assert.equal(response.status, 200);
+            const payload = await response.json() as { status: string };
+            assert.equal(payload.status, status, "upstream response stays intact");
+            assert.equal(pendingRebase(session), status === "completed" ? true : undefined, `rebase follows JSON ${status} status`);
+        }
     } finally {
         proxy.close();
         proxy.closeIdleConnections?.();

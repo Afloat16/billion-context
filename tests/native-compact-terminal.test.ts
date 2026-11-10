@@ -76,6 +76,13 @@ test("e2e #321 PR-C: rebase only on completed; trigger request forwarded clean",
                 res.end();
                 return;
             }
+            if (mode === "terminal-header" || mode === "terminal-partial") {
+                res.write(sse("response.created", { type: "response.created", response: { id: "r1" } }));
+                res.end(mode === "terminal-header"
+                    ? "event: response.completed\n"
+                    : 'event: response.completed\ndata: {"type":"response.completed","response":');
+                return;
+            }
             res.write(sse("response.created", { type: "response.created", response: { id: "r1" } }));
             res.write(sse("response.completed", { type: "response.completed", response: { id: "r1", status: "completed", output: [], usage: { input_tokens: 100, output_tokens: 5, total_tokens: 105 } } }));
             res.end();
@@ -174,6 +181,18 @@ test("e2e #321 PR-C: rebase only on completed; trigger request forwarded clean",
         assert.equal(r3.status, 200);
         await r3.text();
         assert.equal(pendingRebase("term-trunc"), undefined, "truncated stream must not schedule a rebase");
+
+        for (const mode of ["terminal-header", "terminal-partial"]) {
+            const response = await postResponses(`/responses?mode=${mode}`, {
+                model: "gpt-resp",
+                stream: true,
+                session_id: `term-${mode}`,
+                input: [...conversation(), { type: "compaction_trigger" }],
+            });
+            assert.equal(response.status, 200);
+            await response.text();
+            assert.equal(pendingRebase(`term-${mode}`), undefined, `${mode}: incomplete completion frame must preserve history`);
+        }
 
         // 4. Endpoint form, 2xx JSON error body → NO rebase.
         const r4 = await postResponses("/responses/compact?mode=json-error", { model: "gpt-resp", session_id: "term-jsonerr" });

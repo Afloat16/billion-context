@@ -4,6 +4,8 @@
 // never happened discards valid blocks (#249). "unknown" is the safe default
 // (no rebase; the next request self-heals via kernel message-id deactivation).
 
+import { finalizeSseLineEndings, normalizeSseLineEndings } from "./sse-util.js";
+
 type TerminalState = "completed" | "failed" | "unknown";
 
 const SUCCEEDED = "response.completed";
@@ -14,23 +16,28 @@ export async function observeResponsesTerminalState(stream: ReadableStream<Uint8
     return isStream ? observeSseTerminalState(stream) : observeJsonTerminalState(stream);
 }
 
-function terminalFromSseLine(line: string): TerminalState | null {
-    if (line.startsWith("event:")) {
-        const name = line.slice(6).trim();
-        if (name === SUCCEEDED) return "completed";
-        if (FAILED_EVENTS.has(name)) return "failed";
-        return null;
+function terminalFromSseEvent(frame: string): TerminalState | null {
+    let event = "";
+    const data: string[] = [];
+    for (const line of frame.split("\n")) {
+        const colon = line.indexOf(":");
+        const field = colon < 0 ? line : line.slice(0, colon);
+        const raw = colon < 0 ? "" : line.slice(colon + 1);
+        const value = raw.startsWith(" ") ? raw.slice(1) : raw;
+        if (field === "event") event = value;
+        else if (field === "data") data.push(value);
     }
-    if (line.startsWith("data:")) {
-        const data = line.slice(5).trim();
-        if (!data.startsWith("{")) return null;
-        try {
-            const type = (JSON.parse(data) as { type?: unknown }).type;
-            if (type === SUCCEEDED) return "completed";
-            if (type === "response.failed" || type === "response.incomplete") return "failed";
-        } catch {
-            return null;
-        }
+    if (data.length === 0) return null;
+    try {
+        const payload: unknown = JSON.parse(data.join("\n"));
+        if (typeof payload !== "object" || payload === null || Array.isArray(payload)) return null;
+        const type = (payload as { type?: unknown }).type;
+        if (FAILED_EVENTS.has(event) || (typeof type === "string" && FAILED_EVENTS.has(type))) return "failed";
+        const name = typeof type === "string" ? type : event;
+        if (name === SUCCEEDED) return "completed";
+    } catch {
+        // An event label without usable JSON is not evidence that compaction
+        // completed at the client. Preserve the existing history instead.
     }
     return null;
 }
@@ -43,13 +50,13 @@ async function observeSseTerminalState(stream: ReadableStream<Uint8Array>): Prom
     try {
         for (;;) {
             const { done, value } = await reader.read();
-            if (done) break;
-            buf += decoder.decode(value, { stream: true });
-            let nl: number;
-            while ((nl = buf.indexOf("\n")) >= 0) {
-                const line = buf.slice(0, nl).replace(/\r$/, "");
-                buf = buf.slice(nl + 1);
-                const next = terminalFromSseLine(line);
+            buf += done ? decoder.decode() : decoder.decode(value, { stream: true });
+            buf = done ? finalizeSseLineEndings(buf) : normalizeSseLineEndings(buf);
+            let end: number;
+            while ((end = buf.indexOf("\n\n")) >= 0) {
+                const frame = buf.slice(0, end);
+                buf = buf.slice(end + 2);
+                const next = terminalFromSseEvent(frame);
                 if (next !== null) {
                     state = next;
                     break;
@@ -60,6 +67,9 @@ async function observeSseTerminalState(stream: ReadableStream<Uint8Array>): Prom
                 await reader.cancel().catch(() => {});
                 break;
             }
+            // EOF is not an event delimiter: a partial completion frame must
+            // never authorize rebasing the client's still-uncompacted history.
+            if (done) break;
         }
     } catch {
         return "unknown";

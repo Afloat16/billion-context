@@ -85,6 +85,58 @@ test("SSE: non-JSON data lines are ignored, not fatal", async () => {
     assert.equal(await observeResponsesTerminalState(stream, true), "completed");
 });
 
+for (const fragment of [
+    "event: response.completed\n",
+    'event: response.completed\ndata: {"type":"response.completed",',
+    'event: response.completed\ndata: {"type":"response.completed"}\n',
+    "event: response.completed\n\n",
+    "event: response.completed\ndata: not-json\n\n",
+]) {
+    test(`SSE: incomplete or unusable terminal frame cannot authorize rebase: ${JSON.stringify(fragment)}`, async () => {
+        assert.equal(await observeResponsesTerminalState(sseStream([fragment]), true), "unknown");
+    });
+}
+
+test("SSE: terminal state waits for the frame delimiter", async () => {
+    const encoder = new TextEncoder();
+    let controller!: ReadableStreamDefaultController<Uint8Array>;
+    const stream = new ReadableStream<Uint8Array>({ start(c) { controller = c; } });
+    let settled = false;
+    const observed = observeResponsesTerminalState(stream, true).then((state) => { settled = true; return state; });
+    controller.enqueue(encoder.encode('event: response.completed\ndata: {"type":"response.completed"}\n'));
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    const premature = settled;
+    if (!premature) controller.enqueue(encoder.encode("\n"));
+    assert.equal(await observed, "completed");
+    assert.equal(premature, false, "a parsed terminal data line alone is not a dispatched event");
+});
+
+test("SSE: joins multiline data before reading the terminal type", async () => {
+    const frame = 'data: {\ndata: "type": "response.completed",\ndata: "response": {"status":"completed"}}\n\n';
+    assert.equal(await observeResponsesTerminalState(sseStream([frame]), true), "completed");
+});
+
+test("SSE: lone CR endings, including the final delimiter, complete the frame", async () => {
+    const frame = sse("response.completed", { type: "response.completed" }).replace(/\n/g, "\r");
+    assert.equal(await observeResponsesTerminalState(sseStream([...frame]), true), "completed");
+});
+
+test("SSE: split CRLF inside multiline data never dispatches a partial frame", async () => {
+    const frame = 'event: response.completed\r\ndata: {"type":\r\ndata: "response.completed"}\r\n\r\n';
+    assert.equal(await observeResponsesTerminalState(sseStream([...frame]), true), "completed");
+});
+
+test("SSE: later event fields replace earlier labels in the same frame", async () => {
+    const frame = 'event: response.completed\nevent: response.failed\ndata: {"type":"response.failed"}\n\n';
+    assert.equal(await observeResponsesTerminalState(sseStream([frame]), true), "failed");
+});
+
+test("SSE: a failure event label cannot be overridden by a conflicting success payload", async () => {
+    assert.equal(await observeResponsesTerminalState(sseStream([
+        sse("response.failed", { type: "response.completed" }),
+    ]), true), "failed");
+});
+
 test("JSON: output array present → completed", async () => {
     const stream = sseStream([JSON.stringify({ id: "r1", status: "completed", output: [{ type: "compaction", encrypted_content: "x" }], usage: {} })]);
     assert.equal(await observeResponsesTerminalState(stream, false), "completed");

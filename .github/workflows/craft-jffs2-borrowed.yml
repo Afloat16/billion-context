@@ -1,0 +1,105 @@
+name: Verify borrowed JFFS2 node payloads
+on:
+  push:
+    branches: ["validation/craft-jffs2-borrowed-payloads-20261111"]
+permissions:
+  contents: read
+jobs:
+  correctness:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: fixed
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: Afloat16/craft-anything
+          ref: ee91a2b82639b673b140442615f9cab0bb71a73d
+          fetch-depth: 3
+          path: fixed
+          persist-credentials: false
+      - name: Install fixed Rust
+        run: rustup toolchain install 1.99.0 --profile minimal --component rustfmt --component clippy --target wasm32-unknown-unknown
+      - name: Use fixed compiler
+        run: rustup override set 1.99.0
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
+        with:
+          workspaces: fixed -> target
+          shared-key: craft-jffs2-1.99
+      - name: Check formatting
+        run: |
+          if ! cargo fmt --all --check; then
+            cargo fmt --all
+            python3 - <<'PY'
+          import json
+          from pathlib import Path
+          print("FORMATTED_FILES_JSON=" + json.dumps({"crates/formats/src/fsread/jffs2.rs": Path("crates/formats/src/fsread/jffs2.rs").read_text()}))
+          PY
+            exit 1
+          fi
+      - name: Complete formats suite
+        run: cargo test --locked -p craft-anything-formats --no-fail-fast
+      - name: Strict Clippy
+        run: cargo clippy --locked -p craft-anything-formats --all-targets -- -D warnings
+      - name: Repository contracts
+        run: |
+          cargo xtask layers
+          cargo xtask locks
+          cargo xtask secrets
+      - name: All L0-L2 WebAssembly targets
+        run: cargo xtask wasm
+      - name: Clean source and dependencies
+        run: |
+          git diff --check
+          test -z "$(git status --porcelain)"
+  native:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          path: validation
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: Afloat16/craft-anything
+          ref: 35f11365026263f43884eadc9ec3296b99893ba1
+          path: base
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: Afloat16/craft-anything
+          ref: ee91a2b82639b673b140442615f9cab0bb71a73d
+          path: fixed
+          persist-credentials: false
+      - name: Install native image producer
+        run: |
+          sudo apt-get -o Acquire::Retries=3 update
+          sudo apt-get -o Acquire::Retries=3 install -y mtd-utils
+          mkfs.jffs2 -V
+      - name: Install fixed Rust
+        run: rustup toolchain install 1.99.0 --profile minimal
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
+        with:
+          workspaces: |
+            base -> target
+            fixed -> target
+          shared-key: craft-jffs2-native-1.99
+      - name: Existing version, damage, byte-order and budget regressions on both versions
+        run: |
+          for directory in base fixed; do
+            (cd "$directory" && cargo +1.99.0 test --locked -p craft-anything-formats --test jffs2_decoded_lengths --test jffs2_big_endian --test jffs2_unrecovered_size)
+          done
+      - name: Compile the identical public recovery probe
+        run: |
+          cmp base/Cargo.toml fixed/Cargo.toml
+          cmp base/Cargo.lock fixed/Cargo.lock
+          cmp base/crates/formats/Cargo.toml fixed/crates/formats/Cargo.toml
+          for directory in base fixed; do
+            mkdir -p "$directory/crates/formats/examples"
+            cp validation/.github/validation/jffs2_payload_probe.rs "$directory/crates/formats/examples/jffs2_payload_probe.rs"
+            (cd "$directory" && cargo +1.99.0 build --locked --release -p craft-anything-formats --example jffs2_payload_probe)
+          done
+      - name: Compare native images, exact recovered bytes, time and process peak RSS
+        run: python3 validation/.github/validation/jffs2_payload_compare.py

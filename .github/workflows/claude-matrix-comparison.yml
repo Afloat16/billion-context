@@ -1,0 +1,94 @@
+name: Claude sync matrix baseline comparison
+on:
+  push:
+    branches: [validation/claude-matrix-regressions-20261111]
+permissions:
+  contents: read
+jobs:
+  matrix:
+    name: sync matrix on ${{ matrix.label }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: main-6b779c0
+            ref: 6b779c06796138aeb4b0ee2fa7dbd25912e4f7fb
+          - label: telemetry-a9f5550
+            ref: a9f5550fbc660ad105444b17e479e1a03e4eb437
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: sync_api_test
+        ports: [5432:5432]
+        options: >-
+          --health-cmd "pg_isready -U postgres -d sync_api_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/sync_api_test
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: Afloat16/claude-mem
+          ref: ${{ matrix.ref }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - name: Install repository dependencies
+        run: npm install --no-audit --no-fund
+      - name: Install sync-api dependencies
+        working-directory: services/sync-api
+        run: bun install --frozen-lockfile
+      - name: Install viewer-host dependencies
+        working-directory: services/viewer-host
+        run: bun install --frozen-lockfile
+      - name: Install My Work dependencies
+        working-directory: src/ui/my-work
+        run: npm ci --no-audit --no-fund
+      - name: Warm Chrome
+        run: time google-chrome --headless --no-sandbox --disable-gpu --dump-dom about:blank
+      - name: Run unchanged matrix script on fresh database
+        id: acceptance
+        continue-on-error: true
+        shell: bash
+        run: bun scripts/sync-matrix-e2e.ts 2>&1 | tee matrix-original.log
+      - name: Repeat failed matrix with descriptor diagnostics on a new database
+        if: steps.acceptance.outcome == 'failure'
+        continue-on-error: true
+        shell: bash
+        env:
+          DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/sync_matrix_debug
+          PGPASSWORD: postgres
+        run: |
+          createdb -h 127.0.0.1 -U postgres sync_matrix_debug
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path("scripts/sync-matrix-e2e.ts")
+          source = path.read_text()
+          needle = "    'review fingerprints agree across distinct replica ids');"
+          replacement = "    'review fingerprints agree across distinct replica ids', { local: { contentFingerprint: av.contentFingerprint, descriptor: av.sharedReviewDescriptor }, middle: { contentFingerprint: bv.contentFingerprint, descriptor: bv.sharedReviewDescriptor }, hosted: { contentFingerprint: cv.contentFingerprint, descriptor: cv.sharedReviewDescriptor } });"
+          if source.count(needle) != 1:
+              raise SystemExit("diagnostic target changed")
+          path.write_text(source.replace(needle, replacement))
+          PY
+          bun scripts/sync-matrix-e2e.ts 2>&1 | tee matrix-diagnostic.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ${{ matrix.label }}-matrix-acceptance
+          path: matrix-*.log
+          retention-days: 7
+      - name: Preserve the original acceptance result
+        if: always()
+        shell: bash
+        run: test '${{ steps.acceptance.outcome }}' = 'success'

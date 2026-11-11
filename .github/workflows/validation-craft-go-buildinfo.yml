@@ -26,9 +26,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: Afloat16/craft-anything
-          ref: 8779ef0f251418d1007e475590bb9cb7326d5ce6
+          ref: bfe391a2da3c36bb76af7256c8c0fbec15209d96
           path: candidate
-          fetch-depth: 4
+          fetch-depth: 5
           persist-credentials: false
       - name: Verify exact tested source and claim ancestry
         run: python3 "$GITHUB_WORKSPACE/validation/.github/validation/go_final_identity.py"

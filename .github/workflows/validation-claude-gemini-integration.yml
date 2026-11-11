@@ -1,4 +1,4 @@
-name: Claude Gemini integration comparison
+name: Claude Gemini exact Chrome helper comparison
 on:
   push:
     branches: [validation/claude-gemini-integration-20261111]
@@ -6,7 +6,7 @@ permissions:
   contents: read
 jobs:
   integration:
-    name: integration on ${{ matrix.label }}
+    name: Chrome helper on ${{ matrix.label }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     strategy:
@@ -31,27 +31,19 @@ jobs:
           bun-version: 1.4.4
       - name: Install dependencies
         run: npm install --no-audit --no-fund
-      - name: Install Fish and ripgrep
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y fish ripgrep
-          fish --version
-          rg --version
-      - name: Build distribution for integration fixtures
-        run: npm run build
-      - name: Install upstream-pinned Claude Code for the auto-clear engine test
-        run: |
-          npm install --global @anthropic-ai/claude-code@2.1.321 --no-audit --no-fund
-          claude --version
-      - name: Run unchanged integration lane
+      - name: Run the unchanged Chrome helper cases
         shell: bash
-        env:
-          CLAUDE_MEM_TEST_PGVECTOR: '1'
-          CLAUDE_MEM_TEST_AUTO_CLEAR_ENGINE: '1'
-        run: bun scripts/test-lanes.ts integration 2>&1 | tee integration.log
+        run: |
+          bun test tests/helpers/chrome-devtools.browser.test.ts --timeout 30000 2>&1 | tee chrome-helper.log
+      - name: Repeat owned Chrome startup and teardown
+        shell: bash
+        run: |
+          for iteration in 1 2 3 4; do
+            bun test tests/helpers/chrome-devtools.browser.test.ts --timeout 30000 2>&1 | tee -a chrome-helper.log
+          done
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: integration-${{ matrix.label }}
-          path: integration.log
+          name: chrome-helper-${{ matrix.label }}
+          path: chrome-helper.log
           retention-days: 7

@@ -1,0 +1,58 @@
+name: Claude C++ template documentation regression
+on:
+  push:
+    branches: [validation/claude-c-cpp-template-docs-20261111]
+permissions:
+  contents: read
+jobs:
+  comparison:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: Afloat16/claude-mem
+          ref: ea4d249dbe133d6c65de5f782547402bfd221c4f
+          fetch-depth: 8
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - name: Install repository dependencies
+        run: npm install --no-audit --no-fund
+      - name: Compile the real C and C++ header fixtures
+        run: |
+          gcc --version
+          g++ --version
+          gcc -x c -std=c11 -Wall -Werror -fsyntax-only tests/services/smart-file-read/fixtures/function-declarations.h
+          g++ -x c++ -std=c++17 -Wall -Werror -fsyntax-only tests/services/smart-file-read/fixtures/function-declarations.hpp
+          node_modules/.bin/tree-sitter --version
+      - name: Reproduce the missing comment-only match on the previous PR source
+        shell: bash
+        run: |
+          git fetch --no-tags --depth=3 origin 8f1548e7f69d7ed2442e50dd42cc4777485e9174
+          git checkout --detach 8f1548e7f69d7ed2442e50dd42cc4777485e9174
+          set +e
+          bun test tests/services/smart-file-read/c-cpp-declarations.test.ts --timeout 120000 2>&1 | tee "$RUNNER_TEMP/c-declarations-baseline.log"
+          result=${PIPESTATUS[0]}
+          set -e
+          test "$result" -eq 1
+          grep -F '1 fail' "$RUNNER_TEMP/c-declarations-baseline.log"
+          grep -F '8 pass' "$RUNNER_TEMP/c-declarations-baseline.log"
+      - name: Verify native header outline search and unfold
+        run: |
+          git checkout --detach ea4d249dbe133d6c65de5f782547402bfd221c4f
+          bun test tests/services/smart-file-read/c-cpp-declarations.test.ts --timeout 120000
+      - name: Run all native smart file regressions
+        run: bun test tests/services/smart-file-read --timeout 120000
+      - name: Check root and viewer TypeScript
+        run: npm run typecheck
+      - name: Build all shipped bundles
+        run: node scripts/build-hooks.js
+      - name: Check patch and lane ownership
+        run: |
+          git diff --check 308a9ab4a141ac49ca0e72bbccc0c9cdf3770ca0 HEAD
+          bun scripts/test-lanes.ts check

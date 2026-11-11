@@ -1,0 +1,39 @@
+name: Claude native Gemini provenance baseline
+on:
+  push:
+    branches: [validation/claude-gemini-provenance-probe-20261111]
+permissions:
+  contents: read
+jobs:
+  baseline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: Afloat16/claude-mem
+          ref: c83f9702895955093d7a65384843a530d20fc2a7
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - name: Install repository dependencies
+        run: npm install --no-audit --no-fund
+      - name: Reproduce incorrect prompt authorship in unchanged production source
+        run: |
+          set +e
+          bun test tests/services/prompt-import/gemini-native-provenance.test.ts --timeout 30000 2>&1 | tee gemini-provenance-baseline.log
+          status=${PIPESTATUS[0]}
+          set -e
+          test "$status" -eq 1
+          grep -q '2 fail' gemini-provenance-baseline.log
+          grep -q '4 pass' gemini-provenance-baseline.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gemini-provenance-baseline
+          path: gemini-provenance-baseline.log
+          retention-days: 7

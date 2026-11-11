@@ -8,9 +8,6 @@ jobs:
   comparison:
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    env:
-      CLAUDE_MEM_DATA_DIR: ${{ runner.temp }}/claude-replay-data
-      CLAUDE_CONFIG_DIR: ${{ runner.temp }}/claude-replay-config
     steps:
       - uses: actions/checkout@v4
         with:
@@ -24,6 +21,10 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.4
+      - name: Isolate runtime data in the runner directory
+        run: |
+          echo "CLAUDE_MEM_DATA_DIR=$RUNNER_TEMP/claude-replay-data" >> "$GITHUB_ENV"
+          echo "CLAUDE_CONFIG_DIR=$RUNNER_TEMP/claude-replay-config" >> "$GITHUB_ENV"
       - name: Install repository dependencies
         run: npm install --no-audit --no-fund
       - name: Record unchanged-main semantics and lookup plan

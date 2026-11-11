@@ -1,0 +1,191 @@
+name: GDB result-token attribution baseline
+
+on:
+  push:
+    branches: [validation/craft-gdb-result-tokens-20261111]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  gdb-tokens:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      CARGO_INCREMENTAL: "0"
+      CARGO_BUILD_JOBS: "2"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+      CARGO_PROFILE_DEV_OPT_LEVEL: "0"
+      CARGO_TERM_COLOR: never
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: Afloat16/craft-anything
+          ref: 3ce1ce9f52077a53811be8a0309fdbe85b16b417
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check native GDB with Python support
+        run: |
+          gdb --version
+          gdb -nx -q -batch -ex 'python import time; print("GDB_PYTHON_READY")'
+      - name: Install Rust
+        run: |
+          rustup toolchain install 1.99.0 --profile minimal
+          rustup default 1.99.0
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
+        with:
+          key: craft-gdb-result-tokens-native-v1
+          save-if: true
+          cache-on-failure: true
+      - name: Compare public session attribution with native GDB tokens
+        run: |
+          mkdir -p crates/engines/examples
+          trap 'rm -f crates/engines/examples/validation_gdb_tokens.rs' EXIT
+          cat > crates/engines/examples/validation_gdb_tokens.rs <<'RS'
+          use craft_anything_engines::gdb::GdbSession;
+          use serde_json::json;
+          use std::path::Path;
+          use std::time::Duration;
+          
+          fn main() {
+              let scenario = std::env::args().nth(1).expect("scenario");
+              let mut session = GdbSession::start(Path::new("gdb"), None, None, &[]).unwrap();
+              let (ready, waiting) = session.exec("-gdb-version", Duration::from_secs(5), &|| false).unwrap();
+              assert!(!waiting && ready.result.as_deref() == Some("done"), "{ready:?}");
+              let first = match scenario.as_str() {
+                  "current_error" => None,
+                  "late_success_current_waiting" => Some("python import time; time.sleep(0.15)"),
+                  "late_success_current_success" => Some("python import time; time.sleep(0.35)"),
+                  _ => Some("python import time; time.sleep(0.35); raise RuntimeError('OLD_ERROR_MARKER')"),
+              };
+              let first_waiting = first.map(|command| {
+                  let cancel = scenario == "cancelled_error_current_success";
+                  let (_, waiting) = session.console(command, Duration::from_millis(40), &|| cancel).unwrap();
+                  waiting
+              });
+              let (collected, waiting) = if scenario == "late_success_current_waiting" {
+                  session.console("python import time; time.sleep(0.6)", Duration::from_millis(300), &|| false).unwrap()
+              } else {
+                  let command = if scenario == "current_error" || scenario == "late_error_current_error" {
+                      "-undefined-current-command"
+                  } else {
+                      "-gdb-version"
+                  };
+                  session.exec(command, Duration::from_secs(3), &|| false).unwrap()
+              };
+              println!("{}", json!({
+                  "scenario": scenario,
+                  "first_waiting": first_waiting,
+                  "waiting": waiting,
+                  "result": collected.result,
+                  "error": collected.error,
+              }));
+              session.close();
+          }
+          RS
+          cargo --config 'profile.dev.package."*".opt-level=0' build --locked -p craft-anything-engines --example validation_gdb_tokens
+          cat > /tmp/validation_gdb_tokens.py <<'PY'
+          import json
+          import os
+          import queue
+          import re
+          import subprocess
+          import threading
+          import time
+          
+          SCENARIOS = [
+              "late_error_current_success",
+              "cancelled_error_current_success",
+              "late_success_current_waiting",
+              "late_success_current_success",
+              "late_error_current_error",
+              "current_error",
+          ]
+          
+          def native(scenario):
+              child = subprocess.Popen(
+                  ["gdb", "-nx", "-q", "--interpreter=mi", "-iex", "set auto-load off", "-iex", "set pagination off",
+                   "-iex", "set confirm off", "-iex", "set debuginfod enabled off"],
+                  stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                  text=True, env={**os.environ, "DEBUGINFOD_URLS": ""},
+              )
+              lines = queue.Queue()
+              reader = threading.Thread(target=lambda: [lines.put(line.rstrip("\n")) for line in child.stdout], daemon=True)
+              reader.start()
+              def send(token, command):
+                  child.stdin.write(f"{token}{command}\n")
+                  child.stdin.flush()
+              def collect(token, timeout):
+                  deadline = time.monotonic() + timeout
+                  result = None
+                  records = []
+                  while time.monotonic() < deadline:
+                      try:
+                          line = lines.get(timeout=max(0.001, deadline-time.monotonic()))
+                      except queue.Empty:
+                          break
+                      match = re.match(r"^(\d+)\^([a-z-]+)(?:,(.*))?$", line)
+                      if match:
+                          records.append(line)
+                          if int(match.group(1)) == token:
+                              result = match.group(2)
+                              return result, records
+                  return result, records
+              try:
+                  send(1, "-gdb-version")
+                  assert collect(1, 5)[0] == "done"
+                  if scenario != "current_error":
+                      if scenario == "late_success_current_waiting":
+                          command = "python import time; time.sleep(0.15)"
+                      elif scenario == "late_success_current_success":
+                          command = "python import time; time.sleep(0.35)"
+                      else:
+                          command = "python import time; time.sleep(0.35); raise RuntimeError('OLD_ERROR_MARKER')"
+                      send(2, "-interpreter-exec console " + json.dumps(command))
+                      if scenario != "cancelled_error_current_success":
+                          time.sleep(0.04)
+                  if scenario == "late_success_current_waiting":
+                      command = "-interpreter-exec console " + json.dumps("python import time; time.sleep(0.6)")
+                      timeout = 0.3
+                  elif scenario in ("current_error", "late_error_current_error"):
+                      command = "-undefined-current-command"
+                      timeout = 3
+                  else:
+                      command = "-gdb-version"
+                      timeout = 3
+                  send(3, command)
+                  result, records = collect(3, timeout)
+                  expected = None if scenario == "late_success_current_waiting" else ("error" if "current_error" in scenario else "done")
+                  assert result == expected, (scenario, result, records)
+                  if scenario != "current_error":
+                      assert any(line.startswith("2^") for line in records), (scenario, records)
+                  assert all(not line.startswith("3^error") for line in records) if expected != "error" else any(line.startswith("3^error") for line in records)
+                  return {"result": result, "waiting": expected is None, "error": expected == "error", "records": records}
+              finally:
+                  child.terminate()
+                  child.wait(timeout=5)
+                  reader.join(timeout=5)
+          
+          rows = []
+          mismatches = []
+          for scenario in SCENARIOS:
+              oracle = native(scenario)
+              product = json.loads(subprocess.check_output(["target/debug/examples/validation_gdb_tokens", scenario], text=True))
+              assert product["first_waiting"] is True if scenario != "current_error" else product["first_waiting"] is None
+              equal = (product["result"] == oracle["result"]
+                       and product["waiting"] == oracle["waiting"]
+                       and (product["error"] is not None) == oracle["error"])
+              if not equal:
+                  mismatches.append(scenario)
+              row = {"scenario": scenario, "native": oracle, "product": product, "equal": equal}
+              rows.append(row)
+              print(json.dumps(row, ensure_ascii=False), flush=True)
+          expected = [] if os.getenv("EXPECT_FIXED") else SCENARIOS[:3]
+          assert mismatches == expected, (mismatches, expected)
+          print(json.dumps({"scenarios": len(rows), "mismatches": mismatches, "controls": len(rows)-len(mismatches)}), flush=True)
+          PY
+          python3 /tmp/validation_gdb_tokens.py
+      - name: Require an unchanged source tree
+        run: test -z "$(git status --porcelain)"

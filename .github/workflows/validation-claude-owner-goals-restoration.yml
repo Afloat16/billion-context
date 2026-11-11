@@ -35,7 +35,16 @@ jobs:
         run: npm install --no-audit --no-fund
       - name: Use the identical test and installed dependencies
         run: |
-          cp after/tests/work-view/owner-goals-batching.test.ts before/tests/work-view/owner-goals-batching.test.ts
+          python3 - <<'PY'
+          from pathlib import Path
+          source = Path("after/tests/work-view/owner-goals-batching.test.ts").read_text()
+          needle = "      expect(restored).toEqual(first);"
+          assert source.count(needle) == 1
+          # Keep the original behavioral assertion; emit its operands as structured diagnostic data.
+          instrumented = source.replace(needle, "      process.stdout.write('RESTORATION_STATE ' + JSON.stringify({ restored, first }) + '\\n');\n" + needle)
+          for folder in ("before", "after"):
+              Path(folder, "tests/work-view/owner-goals-batching.test.ts").write_text(instrumented)
+          PY
           ln -s ../before/node_modules after/node_modules
       - name: Confirm final head differs from the fully tested head only in documentation
         working-directory: after
@@ -51,15 +60,25 @@ jobs:
         working-directory: before
         run: |
           python3 - <<'PY'
-          import subprocess
+          import json, subprocess
           result = subprocess.run(["bun", "test", "tests/work-view/owner-goals-batching.test.ts", "-t", "processes restored source turns", "--timeout", "120000"], text=True, capture_output=True)
-          output = result.stdout + result.stderr
-          print(output)
-          assert result.returncode != 0, "Earlier implementation unexpectedly passed"
-          assert "+ []" in output and "expect(restored).toEqual(first)" in output, "Expected missing restored-source calls"
-          assert "1 fail" in output and "Cannot find module" not in output and "SyntaxError" not in output
-          print("Confirmed: the earlier implementation made zero calls for the 11 restored source turns.")
+          print(result.stdout + result.stderr)
+          marker = "RESTORATION_STATE "
+          states = [json.loads(line[len(marker):]) for line in result.stdout.splitlines() if line.startswith(marker)]
+          assert len(states) == 1, "The exact restoration assertion must have been reached"
+          assert result.returncode != 0 and states[0]["first"] and states[0]["restored"] == [], states
+          print("Confirmed missing restored-source calls:", json.dumps(states[0]))
           PY
       - name: Run the identical three-phase restoration regression on the final head
         working-directory: after
-        run: bun test tests/work-view/owner-goals-batching.test.ts -t 'processes restored source turns' --timeout 120000
+        run: |
+          python3 - <<'PY'
+          import json, subprocess
+          result = subprocess.run(["bun", "test", "tests/work-view/owner-goals-batching.test.ts", "-t", "processes restored source turns", "--timeout", "120000"], text=True, capture_output=True)
+          print(result.stdout + result.stderr)
+          marker = "RESTORATION_STATE "
+          states = [json.loads(line[len(marker):]) for line in result.stdout.splitlines() if line.startswith(marker)]
+          assert len(states) == 1, "The exact restoration assertion must have been reached"
+          assert result.returncode == 0 and states[0]["first"] and states[0]["restored"] == states[0]["first"], states
+          print("Confirmed all restored-source calls:", json.dumps(states[0]))
+          PY

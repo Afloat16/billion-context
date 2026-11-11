@@ -1,0 +1,315 @@
+name: Gitignore boundary escape validation
+
+on:
+  push:
+    branches: [validation/craft-gitignore-boundary-escapes-20261111]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ignore-boundaries:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      CARGO_INCREMENTAL: "0"
+      CARGO_BUILD_JOBS: "2"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+      CARGO_PROFILE_DEV_OPT_LEVEL: "0"
+      CARGO_TERM_COLOR: never
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: Afloat16/craft-anything
+          ref: 22c44d01d271c49187104802459085f273f855f0
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install Rust
+        run: |
+          rustup toolchain install 1.99.0 --profile minimal --component rustfmt --component clippy --target wasm32-unknown-unknown
+          rustup default 1.99.0
+          rustc --version
+          node --version
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
+        with:
+          key: craft-gitignore-boundaries-probe-v1
+          save-if: true
+          cache-on-failure: true
+      - name: Compare original reference-source ignore matching with Git
+        run: |
+          mkdir -p crates/analysis/examples
+          trap 'rm -f crates/analysis/examples/validation_ignore_boundaries.rs' EXIT
+          cat > crates/analysis/examples/validation_ignore_boundaries.rs <<'RUST'
+          use std::io::Read;
+          use craft_anything_analysis::js_source::Ignore;
+          use serde::Deserialize;
+          
+          #[derive(Deserialize)]
+          struct Case {
+              base: String,
+              rules: String,
+              paths: Vec<String>,
+          }
+          
+          fn main() {
+              let mut input = String::new();
+              std::io::stdin().read_to_string(&mut input).unwrap();
+              let cases: Vec<Case> = serde_json::from_str(&input).unwrap();
+              let output: Vec<Vec<bool>> = cases.into_iter().map(|case| {
+                  let mut ignore = Ignore::default();
+                  ignore.add_file(&case.base, &case.rules);
+                  case.paths.iter().map(|path| ignore.is_ignored(path, false)).collect()
+              }).collect();
+              println!("{}", serde_json::to_string(&output).unwrap());
+          }
+          RUST
+          cargo --config 'profile.dev.package."*".opt-level=0' build --locked -p craft-anything-analysis --example validation_ignore_boundaries
+          node <<'NODE'
+          const assert = require("node:assert/strict");
+          const fs = require("node:fs");
+          const path = require("node:path");
+          const { execFileSync, spawnSync } = require("node:child_process");
+          const cases = [
+            {
+              "name": "leading_star",
+              "base": "",
+              "rules": "\\*.js\n",
+              "paths": [
+                "*.js",
+                "app.js",
+                "nested/*.js",
+                "nested/app.js"
+              ]
+            },
+            {
+              "name": "leading_question",
+              "base": "",
+              "rules": "\\?.js\n",
+              "paths": [
+                "?.js",
+                "a.js",
+                "ab.js"
+              ]
+            },
+            {
+              "name": "leading_bracket",
+              "base": "",
+              "rules": "\\[ab].js\n",
+              "paths": [
+                "[ab].js",
+                "a.js",
+                "b.js"
+              ]
+            },
+            {
+              "name": "leading_backslash",
+              "base": "",
+              "rules": "\\\\cache.js\n",
+              "paths": [
+                "\\cache.js",
+                "cache.js"
+              ]
+            },
+            {
+              "name": "escaped_hash",
+              "base": "",
+              "rules": "\\#note.js\n",
+              "paths": [
+                "#note.js",
+                "note.js"
+              ]
+            },
+            {
+              "name": "escaped_bang",
+              "base": "",
+              "rules": "\\!keep.js\n",
+              "paths": [
+                "!keep.js",
+                "keep.js"
+              ]
+            },
+            {
+              "name": "escaped_trailing_space",
+              "base": "",
+              "rules": "trail\\ \n",
+              "paths": [
+                "trail ",
+                "trail",
+                "nested/trail "
+              ]
+            },
+            {
+              "name": "escaped_space_then_padding",
+              "base": "",
+              "rules": "trail\\   \n",
+              "paths": [
+                "trail ",
+                "trail",
+                "trail  "
+              ]
+            },
+            {
+              "name": "escaped_backslash_then_padding",
+              "base": "",
+              "rules": "trail\\\\  \n",
+              "paths": [
+                "trail\\",
+                "trail",
+                "trail\\ "
+              ]
+            },
+            {
+              "name": "invalid_terminal_escape",
+              "base": "",
+              "rules": "trailing\\\n",
+              "paths": [
+                "trailing",
+                "trailing\\"
+              ]
+            },
+            {
+              "name": "invalid_negation_escape",
+              "base": "",
+              "rules": "*.js\n!keep.js\\\n",
+              "paths": [
+                "keep.js",
+                "other.js"
+              ]
+            },
+            {
+              "name": "literal_trailing_tab",
+              "base": "",
+              "rules": "tab\t\n",
+              "paths": [
+                "tab\t",
+                "tab"
+              ]
+            },
+            {
+              "name": "literal_trailing_nbsp",
+              "base": "",
+              "rules": "unicode \n",
+              "paths": [
+                "unicode ",
+                "unicode"
+              ]
+            },
+            {
+              "name": "terminal_carriage_without_newline",
+              "base": "",
+              "rules": "line\r",
+              "paths": [
+                "line",
+                "line\r"
+              ]
+            },
+            {
+              "name": "escaped_space_before_crlf",
+              "base": "",
+              "rules": "line\\ \r\n",
+              "paths": [
+                "line ",
+                "line"
+              ]
+            },
+            {
+              "name": "two_carriages_before_newline",
+              "base": "",
+              "rules": "line\r\r\n",
+              "paths": [
+                "line\r",
+                "line"
+              ]
+            },
+            {
+              "name": "ordinary_glob_and_negation",
+              "base": "",
+              "rules": "*.js\n!keep.js\n",
+              "paths": [
+                "app.js",
+                "keep.js",
+                "app.txt",
+                "nested/app.js",
+                "nested/keep.js"
+              ]
+            },
+            {
+              "name": "nested_ignore_base",
+              "base": "pkg",
+              "rules": "\\*.js\n",
+              "paths": [
+                "pkg/*.js",
+                "pkg/app.js",
+                "*.js",
+                "app.js"
+              ]
+            },
+            {
+              "name": "anchored_literal_star",
+              "base": "",
+              "rules": "/\\*.js\n",
+              "paths": [
+                "*.js",
+                "app.js",
+                "nested/*.js"
+              ]
+            },
+            {
+              "name": "escaped_ordinary_character",
+              "base": "",
+              "rules": "\\a.js\n",
+              "paths": [
+                "a.js",
+                "\\a.js",
+                "b.js"
+              ]
+            }
+          ];
+          const craft = JSON.parse(execFileSync("target/debug/examples/validation_ignore_boundaries", {
+            input: JSON.stringify(cases), encoding: "utf8",
+          }));
+          const root = fs.mkdtempSync(path.join(process.env.RUNNER_TEMP, "craft-ignore-reference-"));
+          const environment = { ...process.env, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" };
+          const outcomes = [];
+          try {
+            cases.forEach((test, index) => {
+              const cwd = path.join(root, String(index));
+              fs.mkdirSync(cwd);
+              execFileSync("git", ["init", "--quiet"], { cwd, env: environment });
+              for (const name of test.paths) {
+                const filename = path.join(cwd, name);
+                fs.mkdirSync(path.dirname(filename), { recursive: true });
+                fs.writeFileSync(filename, "// fixture\n");
+              }
+              const ignorePath = path.join(cwd, test.base, ".gitignore");
+              fs.mkdirSync(path.dirname(ignorePath), { recursive: true });
+              fs.writeFileSync(ignorePath, test.rules);
+              const expected = test.paths.map(name => {
+                const result = spawnSync("git", ["-c", "core.excludesFile=/dev/null", "check-ignore", "--no-index", "-q", "--", name],
+                  { cwd, env: environment, encoding: "utf8" });
+                assert.ok(result.status === 0 || result.status === 1, result.stderr);
+                return result.status === 0;
+              });
+              const mismatches = test.paths.filter((_, position) => craft[index][position] !== expected[position]);
+              outcomes.push({ name: test.name, paths: test.paths, git: expected, craft: craft[index], mismatches });
+            });
+            const byName = name => outcomes.find(test => test.name === name);
+            assert.deepEqual(byName("leading_star").git, [true, false, true, false]);
+            assert.notDeepEqual(byName("leading_star").craft, byName("leading_star").git);
+            assert.deepEqual(byName("escaped_trailing_space").git, [true, false, true]);
+            assert.notDeepEqual(byName("escaped_trailing_space").craft, byName("escaped_trailing_space").git);
+            assert.deepEqual(byName("invalid_terminal_escape").git, [false, false]);
+            assert.notDeepEqual(byName("invalid_terminal_escape").craft, byName("invalid_terminal_escape").git);
+            for (const name of ["escaped_hash", "escaped_bang", "ordinary_glob_and_negation", "anchored_literal_star", "escaped_ordinary_character"]) {
+              assert.deepEqual(byName(name).craft, byName(name).git, name);
+            }
+            console.log("Original ignore boundary comparison / " + execFileSync("git", ["--version"], { encoding: "utf8" }).trim() +
+              " / Node " + process.version + ": " + JSON.stringify(outcomes));
+          } finally {
+            fs.rmSync(root, { recursive: true, force: true });
+          }
+          NODE
+      - name: Require an unchanged source tree
+        run: git diff --exit-code

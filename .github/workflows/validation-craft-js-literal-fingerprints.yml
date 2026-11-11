@@ -23,7 +23,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: Afloat16/craft-anything
-          ref: 7116cc6cb486ada87497de2568c6b6db5a2ea783
+          ref: b6864b6e0d2b324a7bba31e2dcdddc0c7ade433c
           fetch-depth: 0
           persist-credentials: false
       - name: Install Rust
@@ -34,10 +34,52 @@ jobs:
           node --version
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
         with:
-          key: craft-js-literal-fingerprints-probe-v1
+          key: craft-js-literal-fingerprints-full-v1
           save-if: true
           cache-on-failure: true
-      - name: Compare original fingerprints against real JavaScript results
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Reproduce original literal fingerprint failures and controls
+        run: |
+          python3 - <<'PY'
+          import pathlib
+          import subprocess
+          path = pathlib.Path("crates/js/src/fingerprint.rs")
+          fixed = path.read_bytes()
+          cases = [
+              ("craft-anything-js", 4, {
+                  "bigint_values_remain_distinct_without_float_conversion",
+                  "regular_expression_patterns_and_flags_change_fingerprints",
+                  "every_template_text_position_changes_the_fingerprint",
+                  "tagged_template_raw_text_and_invalid_escapes_remain_observable",
+              }),
+              ("craft-anything-analysis", 1, {
+                  "literal_changes_do_not_match_different_files_as_structural_renames",
+                  "changed_bundle_literals_reach_the_changed_module_inventory",
+              }),
+          ]
+          try:
+              path.write_bytes(subprocess.check_output(["git", "show", "22c44d01d271c49187104802459085f273f855f0:" + path.as_posix()]))
+              for package, passing, failures in cases:
+                  result = subprocess.run(
+                      ["cargo", "--config", 'profile.dev.package."*".opt-level=0', "test", "--locked",
+                       "-p", package, "--test", "literal_fingerprints", "--", "--nocapture"],
+                      text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                  )
+                  print(result.stdout, end="")
+                  summary = f"test result: FAILED. {passing} passed; {len(failures)} failed;"
+                  if result.returncode == 0 or summary not in result.stdout:
+                      raise SystemExit("Original source did not reproduce expected failures and controls for " + package)
+                  failure_list = result.stdout.rsplit("failures:", 1)[-1].split("test result:", 1)[0]
+                  actual_failures = {line.strip() for line in failure_list.splitlines() if line.strip()}
+                  if actual_failures != failures:
+                      raise SystemExit("Unexpected original-source failure set: " + repr(actual_failures))
+          finally:
+              path.write_bytes(fixed)
+          PY
+      - name: Run the full JavaScript and analysis suites
+        run: cargo --config 'profile.dev.package."*".opt-level=0' test --locked -p craft-anything-js -p craft-anything-analysis
+      - name: Compare fixed fingerprints against real JavaScript results
         run: |
           mkdir -p crates/analysis/examples
           trap 'rm -f crates/analysis/examples/validation_literal_fingerprints.rs' EXIT
@@ -182,16 +224,27 @@ jobs:
             const result = parsed[index];
             assert.match(result.left, /^[a-f0-9]{64}$/);
             assert.match(result.right, /^[a-f0-9]{64}$/);
-            assert.equal(result.left, result.right, test.name + " baseline fingerprint");
-            assert.equal(result.files.renamed.length, 1, test.name + " baseline file structure match");
+            assert.equal(result.left === result.right, test.same, test.name + " fixed fingerprint");
+            assert.equal(result.files.renamed.length, test.same ? 1 : 0, test.name + " fixed file structure match");
             assert.equal(result.bundle.left, 1);
             assert.equal(result.bundle.right, 1);
-            assert.equal(result.bundle.matched_by.structure, 1, test.name + " baseline bundle structure match");
-            assert.equal(result.bundle.changed.length, 0);
+            assert.equal(result.bundle.matched_by[test.same ? "structure" : "id"], 1, test.name + " fixed bundle match");
+            assert.equal(result.bundle.changed.length, test.same ? 0 : 1);
             return { name: test.name, same_runtime_result: test.same, same_fingerprint: result.left === result.right,
               bundle_changed: result.bundle.changed.length };
           });
-          console.log("Original literal fingerprints / Node " + process.version + ": " + JSON.stringify(outcomes));
+          console.log("Fixed literal fingerprints / Node " + process.version + ": " + JSON.stringify(outcomes));
           NODE
-      - name: Require an unchanged source tree
-        run: git diff --exit-code
+      - name: Run strict all-target Clippy
+        run: cargo --config 'profile.dev.package."*".opt-level=0' clippy --locked -p craft-anything-js -p craft-anything-analysis --all-targets -- -D warnings
+      - name: Check repository contracts
+        run: |
+          cargo --config 'profile.dev.package."*".opt-level=0' xtask layers
+          cargo --config 'profile.dev.package."*".opt-level=0' xtask locks
+          cargo --config 'profile.dev.package."*".opt-level=0' xtask secrets
+      - name: Check all WebAssembly layers
+        run: cargo --config 'profile.dev.package."*".opt-level=0' xtask wasm
+      - name: Require formatting and an unchanged source tree
+        run: |
+          cargo fmt --all -- --check
+          git diff --exit-code

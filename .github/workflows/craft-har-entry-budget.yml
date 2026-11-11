@@ -1,0 +1,93 @@
+name: Verify bounded HAR entry allocation
+on:
+  push:
+    branches: ["validation/craft-har-entry-budget-20261111"]
+permissions:
+  contents: read
+jobs:
+  correctness:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: fixed
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: Afloat16/craft-anything
+          ref: a24c45f2284fce88c4bb23486c8ae22461b97955
+          path: fixed
+          persist-credentials: false
+      - name: Install Rust
+        run: rustup toolchain install 1.99.0 --profile minimal --component rustfmt --component clippy --target wasm32-unknown-unknown
+      - name: Use fixed compiler
+        run: rustup override set 1.99.0
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
+        with:
+          workspaces: fixed -> target
+          shared-key: craft-har-1.99
+      - name: Check formatting
+        run: |
+          if ! cargo fmt --all --check; then
+            cargo fmt --all
+            python3 - <<'PY'
+          import json
+          from pathlib import Path
+          print("FORMATTED_FILES_JSON=" + json.dumps({p: Path(p).read_text() for p in ["crates/formats/src/har.rs", "crates/formats/tests/har_entry_budget.rs"]}))
+          PY
+            exit 1
+          fi
+      - name: Run focused compatibility checks
+        run: cargo test --locked -p craft-anything-formats --test har_entry_budget
+      - name: Complete affected parser and application suites
+        run: cargo test --locked -p craft-anything-formats -p craft-anything-analysis --no-fail-fast
+      - name: Strict Clippy
+        run: cargo clippy --locked -p craft-anything-formats -p craft-anything-analysis --all-targets -- -D warnings
+      - name: Repository contracts
+        run: |
+          cargo xtask layers
+          cargo xtask locks
+          cargo xtask secrets
+      - name: All L0-L2 WebAssembly targets
+        run: cargo xtask wasm
+      - name: Check unchanged source and dependencies
+        run: |
+          git diff --check
+          test -z "$(git status --porcelain)"
+  comparison:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          path: validation
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: Afloat16/craft-anything
+          ref: 7116cc6cb486ada87497de2568c6b6db5a2ea783
+          path: base
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: Afloat16/craft-anything
+          ref: a24c45f2284fce88c4bb23486c8ae22461b97955
+          path: fixed
+          persist-credentials: false
+      - name: Install fixed Rust
+        run: rustup toolchain install 1.99.0 --profile minimal
+      - name: Original and changed public API controls
+        run: |
+          cp fixed/crates/formats/tests/har_entry_budget.rs base/crates/formats/tests/har_entry_budget.rs
+          (cd base && cargo +1.99.0 test --locked -p craft-anything-formats --test har_entry_budget)
+          (cd fixed && cargo +1.99.0 test --locked -p craft-anything-formats --test har_entry_budget)
+      - name: Compile the identical public reader probe
+        run: |
+          for directory in base fixed; do
+            mkdir -p "$directory/crates/formats/examples"
+            cp validation/.github/validation/har_budget_probe.rs "$directory/crates/formats/examples/har_budget_probe.rs"
+            (cd "$directory" && cargo +1.99.0 build --locked --release -p craft-anything-formats --example har_budget_probe)
+          done
+          cmp base/Cargo.lock fixed/Cargo.lock
+      - name: Compare complete typed output, elapsed parsing and process peak RSS
+        run: python3 validation/.github/validation/har_budget_compare.py

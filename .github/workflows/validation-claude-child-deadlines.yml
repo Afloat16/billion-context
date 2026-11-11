@@ -1,0 +1,80 @@
+name: Claude owned regression child deadlines
+on:
+  push:
+    branches: [validation/claude-owned-child-deadlines-20261111]
+permissions:
+  contents: read
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: Afloat16/claude-mem
+          ref: 14be1f8cde01eb774d1ad02e8c03a8371e77085f
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - name: Install repository dependencies
+        run: npm install --no-audit --no-fund
+      - name: Confirm the runtime actually enforces a child deadline
+        shell: bash
+        run: |
+          timeout 5s bun -e 'const at = performance.now(); const child = Bun.spawnSync([process.execPath, "-e", "setInterval(() => {}, 1000)"], { timeout: 100, stdout: "pipe", stderr: "pipe" }); const elapsedMs = performance.now() - at; console.log(JSON.stringify({ success: child.success, exitCode: child.exitCode, signalCode: child.signalCode, elapsedMs })); if (child.success || elapsedMs > 4000) throw new Error("Owned child deadline was not enforced");'
+      - name: Verify only the discovery fixture deadline changed
+        shell: bash
+        run: |
+          git fetch --no-tags --depth=2 origin 14be1f8cde01eb774d1ad02e8c03a8371e77085f
+          git checkout --detach 14be1f8cde01eb774d1ad02e8c03a8371e77085f
+          node --input-type=module <<'IDENTITY'
+          import { execFileSync } from 'node:child_process';
+          const old = '852f52d4542223b9b09783995494d36996e5d529', head = '14be1f8cde01eb774d1ad02e8c03a8371e77085f', path = 'tests/context/discovery-usage-cache.test.ts';
+          const git = args => execFileSync('git', args, { encoding: 'utf8' });
+          if (git(['diff', '--name-only', old, head]).trim() !== path) throw new Error('Unexpected changed files');
+          const before = git(['show', old + ':' + path]), after = git(['show', head + ':' + path]);
+          if (after !== before.replace("stdout: 'pipe', stderr: 'pipe',", "stdout: 'pipe', stderr: 'pipe', timeout: 20_000,")) throw new Error('Unexpected fixture edit');
+          console.log('Production bytes identical; only owned child deadline added.');
+          IDENTITY
+          git diff --check 852f52d4542223b9b09783995494d36996e5d529 14be1f8cde01eb774d1ad02e8c03a8371e77085f
+      - name: Run the bounded discovery regression
+        run: bun test tests/context/discovery-usage-cache.test.ts --timeout 30000
+      - name: Verify only the advisor fixture deadline changed
+        shell: bash
+        run: |
+          git fetch --no-tags --depth=2 origin 9c94b82789c5cbe69cec0200da654e938ae71abd
+          git checkout --detach 9c94b82789c5cbe69cec0200da654e938ae71abd
+          node --input-type=module <<'IDENTITY'
+          import { execFileSync } from 'node:child_process';
+          const old = 'f1a10af30ddbfc93135bb036705bbad25ffcf635', head = '9c94b82789c5cbe69cec0200da654e938ae71abd', path = 'tests/worker/http/routes/advisor-project-filter.test.ts';
+          const git = args => execFileSync('git', args, { encoding: 'utf8' });
+          if (git(['diff', '--name-only', old, head]).trim() !== path) throw new Error('Unexpected changed files');
+          const before = git(['show', old + ':' + path]), after = git(['show', head + ':' + path]);
+          if (after !== before.replace("stdout: 'pipe', stderr: 'pipe',", "stdout: 'pipe', stderr: 'pipe', timeout: 20_000,")) throw new Error('Unexpected fixture edit');
+          console.log('Production bytes identical; only owned child deadline added.');
+          IDENTITY
+          git diff --check f1a10af30ddbfc93135bb036705bbad25ffcf635 9c94b82789c5cbe69cec0200da654e938ae71abd
+      - name: Run the bounded advisor regression
+        run: bun test tests/worker/http/routes/advisor-project-filter.test.ts --timeout 30000
+      - name: Verify only the prompt fixture deadline changed
+        shell: bash
+        run: |
+          git fetch --no-tags --depth=2 origin f764afcfddfd8ddce916e7948abdf283fc3eaf9e
+          git checkout --detach f764afcfddfd8ddce916e7948abdf283fc3eaf9e
+          node --input-type=module <<'IDENTITY'
+          import { execFileSync } from 'node:child_process';
+          const old = '864dd004f919ef2158d58229f900a3edb9c55f36', head = 'f764afcfddfd8ddce916e7948abdf283fc3eaf9e', path = 'tests/worker/prompt-feed-window.test.ts';
+          const git = args => execFileSync('git', args, { encoding: 'utf8' });
+          if (git(['diff', '--name-only', old, head]).trim() !== path) throw new Error('Unexpected changed files');
+          const before = git(['show', old + ':' + path]), after = git(['show', head + ':' + path]);
+          if (after !== before.replace("stdout: 'pipe', stderr: 'pipe',", "stdout: 'pipe', stderr: 'pipe', timeout: 20_000,")) throw new Error('Unexpected fixture edit');
+          console.log('Production bytes identical; only owned child deadline added.');
+          IDENTITY
+          git diff --check 864dd004f919ef2158d58229f900a3edb9c55f36 f764afcfddfd8ddce916e7948abdf283fc3eaf9e
+      - name: Run the bounded prompt regression
+        run: bun test tests/worker/prompt-feed-window.test.ts --timeout 30000

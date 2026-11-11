@@ -12,9 +12,13 @@ claim = "8e8b1353f535d3158fbc00588e46bc5b0d7bcbc3"
 def git(*args):
     return subprocess.check_output(["git", *args], text=True).strip()
 
+def parents(ref):
+    header = git("cat-file", "-p", ref).split("\n\n", 1)[0]
+    return [line[7:] for line in header.splitlines() if line.startswith("parent ")]
+
 assert git("rev-parse", "HEAD") == head
-assert git("rev-parse", "HEAD^") == claim
-assert git("rev-parse", claim + "^") == base
+assert parents(head) == [claim]
+assert parents(claim) == [base]
 assert git("diff", "--name-only", tested_base, base).splitlines() == ["docs/ROADMAP.md"]
 assert git("diff", "--name-only", tested, head).splitlines() == ["docs/ROADMAP.md", "docs/STATUS.md"]
 assert git("diff", "--name-only", base, head).splitlines() == [

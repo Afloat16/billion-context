@@ -1,4 +1,4 @@
-name: Gitignore component-star native baseline
+name: Gitignore component-star full validation
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
 jobs:
   component-stars:
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 75
     env:
       CARGO_INCREMENTAL: "0"
       CARGO_BUILD_JOBS: "2"
@@ -23,18 +23,53 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: Afloat16/craft-anything
-          ref: 3ce1ce9f52077a53811be8a0309fdbe85b16b417
+          ref: 0ba6fc7ef7efbf12d63fe0fcb0557da379eadf96
           fetch-depth: 0
           persist-credentials: false
       - name: Install Rust
         run: |
-          rustup toolchain install 1.99.0 --profile minimal
+          rustup toolchain install 1.99.0 --profile minimal --component rustfmt --component clippy --target wasm32-unknown-unknown
           rustup default 1.99.0
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
         with:
-          key: craft-gitignore-component-stars-native-v1
+          key: craft-gitignore-component-stars-full-v1
           save-if: true
           cache-on-failure: true
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Reproduce original component-boundary errors
+        run: |
+          python3 - <<'PY'
+          import pathlib
+          import subprocess
+          path = pathlib.Path("crates/analysis/src/js_source.rs")
+          fixed = path.read_bytes()
+          failures = {
+              "trailing_filename_stars_do_not_remove_the_required_separator",
+              "embedded_filename_star_runs_do_not_cross_directories",
+              "leading_filename_star_runs_stay_in_their_component",
+              "complete_star_components_match_zero_or_more_directories",
+              "escaped_directory_separators_do_not_promote_filename_stars",
+              "recursive_and_filename_stars_keep_their_separate_roles",
+          }
+          try:
+              path.write_bytes(subprocess.check_output(["git", "show", "3ce1ce9f52077a53811be8a0309fdbe85b16b417:" + path.as_posix()]))
+              result = subprocess.run(
+                  ["cargo", "--config", 'profile.dev.package."*".opt-level=0', "test", "--locked",
+                   "-p", "craft-anything-analysis", "--test", "gitignore_component_stars", "--", "--nocapture"],
+                  text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+              )
+              print(result.stdout, end="")
+              if result.returncode == 0 or "test result: FAILED. 3 passed; 6 failed;" not in result.stdout:
+                  raise SystemExit("Expected six star-component regressions and three controls on the unchanged matcher")
+              listed = result.stdout.rsplit("failures:", 1)[-1].split("test result:", 1)[0]
+              actual = {line.strip() for line in listed.splitlines() if line.strip()}
+              assert actual == failures, actual
+          finally:
+              path.write_bytes(fixed)
+          PY
+      - name: Run the complete analysis suite
+        run: cargo --config 'profile.dev.package."*".opt-level=0' test --locked -p craft-anything-analysis
       - name: Compare public ignore matching with native Git
         run: |
           mkdir -p crates/analysis/examples
@@ -89,6 +124,10 @@ jobs:
           with tempfile.TemporaryDirectory(prefix="craft-gitignore-components-") as folder:
               root = pathlib.Path(folder)
               subprocess.run(["git", "init", "-q", str(root)], check=True, env=env)
+              for path in PATHS:
+                  fixture = root / path
+                  fixture.parent.mkdir(parents=True, exist_ok=True)
+                  fixture.write_text("fixture\n")
               for rule in RULES:
                   (root / ".gitignore").write_text(rule + "\n")
                   result = subprocess.run(["git", "-C", str(root), "check-ignore", "--no-index", "-z", "--stdin"],
@@ -97,6 +136,8 @@ jobs:
                   assert result.returncode in (0, 1), result.stderr.decode()
                   ignored = {path.decode() for path in result.stdout.split(b"\0") if path}
                   expected = [path in ignored for path in PATHS]
+                  visible = {path.decode() for path in subprocess.check_output(["git", "-C", str(root), "ls-files", "--others", "--exclude-standard", "-z"], env=env).split(b"\0") if path}
+                  assert [path not in visible for path in PATHS] == expected, (rule, visible, ignored)
                   actual = json.loads(subprocess.check_output([str(EXAMPLE)],
                       input=json.dumps({"rule":rule + "\n", "paths":PATHS}), text=True))
                   assert len(actual) == len(expected)
@@ -119,8 +160,21 @@ jobs:
               assert required <= observed, observed
           print(json.dumps({"git":subprocess.check_output(["git", "--version"], text=True).strip(),
               "rules":len(RULES), "paths":len(PATHS), "comparisons":len(RULES)*len(PATHS),
-              "mismatches":sum(len(row["mismatches"]) for row in results), "control_rules":len(CONTROLS)}), flush=True)
+              "mismatches":sum(len(row["mismatches"]) for row in results), "control_rules":len(CONTROLS), "real_tree_inventories":len(RULES)}), flush=True)
           PY
-          python3 /tmp/validation_gitignore_component_stars.py
-      - name: Require an unchanged source tree
-        run: test -z "$(git status --porcelain)"
+          EXPECT_FIXED=1 python3 /tmp/validation_gitignore_component_stars.py
+          git diff --exit-code
+      - name: Run strict all-target Clippy
+        run: cargo --config 'profile.dev.package."*".opt-level=0' clippy --locked -p craft-anything-analysis --all-targets -- -D warnings
+      - name: Check repository contracts
+        run: |
+          cargo --config 'profile.dev.package."*".opt-level=0' xtask layers
+          cargo --config 'profile.dev.package."*".opt-level=0' xtask locks
+          cargo --config 'profile.dev.package."*".opt-level=0' xtask secrets
+      - name: Check all WebAssembly layers
+        run: cargo --config 'profile.dev.package."*".opt-level=0' xtask wasm
+      - name: Require formatting and an unchanged source tree
+        run: |
+          cargo fmt --all -- --check
+          git diff --check
+          git diff --exit-code

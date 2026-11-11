@@ -1,4 +1,4 @@
-name: Reference-source globstar matching baseline
+name: Reference-source globstar matching validation
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
 jobs:
   ignore-globstar:
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 60
     env:
       CARGO_INCREMENTAL: "0"
       CARGO_BUILD_JOBS: "2"
@@ -19,12 +19,12 @@ jobs:
       CARGO_PROFILE_TEST_DEBUG: "0"
       CARGO_PROFILE_DEV_OPT_LEVEL: "0"
       CARGO_TERM_COLOR: never
-      SOURCE_HEAD: 3a9ad9c6c5de05701d423b8c7e9cc37b550a7170
+      SOURCE_HEAD: 2f282c305c4af80daa89b597b393a03b3397439a
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: Afloat16/craft-anything
-          ref: 3a9ad9c6c5de05701d423b8c7e9cc37b550a7170
+          ref: 2f282c305c4af80daa89b597b393a03b3397439a
           fetch-depth: 0
           persist-credentials: false
       - name: Install Rust
@@ -35,10 +35,34 @@ jobs:
           node --version
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
         with:
-          key: craft-ignore-globstar-probe-v1
+          key: craft-ignore-globstar-full-v1
           save-if: true
           cache-on-failure: true
-      - name: Measure unchanged public ignore matching on real source paths
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Keep the original matcher compatibility controls
+        run: |
+          python3 - <<'PY'
+          import pathlib
+          import subprocess
+          path = pathlib.Path("crates/analysis/src/js_source.rs")
+          fixed = path.read_bytes()
+          try:
+              path.write_bytes(subprocess.check_output(["git", "show", "adeddc9149b97c21e595e743c9875d84e805eece:" + path.as_posix()]))
+              result = subprocess.run(
+                  ["cargo", "--config", 'profile.dev.package."*".opt-level=0', "test", "--locked",
+                   "-p", "craft-anything-analysis", "--test", "gitignore_globstar"],
+                  text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+              )
+              print(result.stdout, end="")
+              if result.returncode or "test result: ok. 8 passed; 0 failed;" not in result.stdout:
+                  raise SystemExit("The original source must pass all eight compatibility controls")
+          finally:
+              path.write_bytes(fixed)
+          PY
+      - name: Run the complete analysis suite
+        run: cargo --config 'profile.dev.package."*".opt-level=0' test --locked -p craft-anything-analysis
+      - name: Compare old and new optimized matchers on the same native inputs
         run: |
           mkdir -p crates/analysis/examples
           trap 'rm -f crates/analysis/examples/validation_gitignore_globstar.rs' EXIT
@@ -70,8 +94,7 @@ jobs:
               println!("{}", serde_json::json!({"matches": matches, "samples_us": samples, "total_matches": total}));
           }
           RUST
-          cargo --config 'profile.dev.package."*".opt-level=0' --config 'profile.dev.package.craft-anything-analysis.opt-level=3' build --locked -p craft-anything-analysis --example validation_gitignore_globstar
-          node <<'NODE'
+          cat > "$RUNNER_TEMP/craft-ignore-globstar-oracle.cjs" <<'NODE'
           const assert = require("node:assert/strict");
           const fs = require("node:fs");
           const path = require("node:path");
@@ -140,5 +163,60 @@ jobs:
             source: process.env.SOURCE_HEAD, matcherOptLevel: 3, rows,
           }));
           NODE
-      - name: Require an unchanged tree
-        run: git diff --exit-code
+          python3 - <<'PY'
+          import json
+          import os
+          import pathlib
+          import subprocess
+          path = pathlib.Path("crates/analysis/src/js_source.rs")
+          fixed = path.read_bytes()
+          base = "adeddc9149b97c21e595e743c9875d84e805eece"
+          head = "2f282c305c4af80daa89b597b393a03b3397439a"
+          evidence = {}
+          try:
+              for variant, source, content in [
+                  ("baseline", base, subprocess.check_output(["git", "show", base + ":" + path.as_posix()])),
+                  ("fixed", head, fixed),
+              ]:
+                  path.write_bytes(content)
+                  subprocess.run(["cargo", "--config", 'profile.dev.package."*".opt-level=0',
+                                  "--config", "profile.dev.package.craft-anything-analysis.opt-level=3",
+                                  "build", "--locked", "-p", "craft-anything-analysis",
+                                  "--example", "validation_gitignore_globstar"], check=True)
+                  env = dict(os.environ, SOURCE_HEAD=source)
+                  result = subprocess.run(["node", os.path.join(os.environ["RUNNER_TEMP"], "craft-ignore-globstar-oracle.cjs")],
+                                          env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=True)
+                  print(variant + " native comparison")
+                  print(result.stdout, end="")
+                  line = next(line for line in result.stdout.splitlines() if line.startswith("IGNORE_GLOBSTAR_EVIDENCE "))
+                  evidence[variant] = json.loads(line.removeprefix("IGNORE_GLOBSTAR_EVIDENCE "))
+          finally:
+              path.write_bytes(fixed)
+          before = evidence["baseline"]
+          after = evidence["fixed"]
+          assert before["semanticComparisons"] == after["semanticComparisons"] == 240
+          assert before["nativeFiles"] == after["nativeFiles"] == 52
+          rows = []
+          for old, new in zip(before["rows"], after["rows"], strict=True):
+              assert old["pathBytes"] == new["pathBytes"]
+              assert old["checksPerSample"] == new["checksPerSample"] == 200
+              rows.append({"pathBytes": old["pathBytes"], "baseline_us": old["median_us"],
+                           "fixed_us": new["median_us"], "speedup": old["median_us"] / max(1, new["median_us"])})
+          assert rows[-1]["speedup"] > 5, rows
+          print("IGNORE_GLOBSTAR_COMPARISON " + json.dumps({"rows": rows, "semantics_match_native_git": 240,
+                "matcher_opt_level": 3, "same_runner": True}))
+          PY
+      - name: Run strict all-target Clippy
+        run: cargo --config 'profile.dev.package."*".opt-level=0' clippy --locked -p craft-anything-analysis --all-targets -- -D warnings
+      - name: Check repository contracts
+        run: |
+          cargo --config 'profile.dev.package."*".opt-level=0' xtask layers
+          cargo --config 'profile.dev.package."*".opt-level=0' xtask locks
+          cargo --config 'profile.dev.package."*".opt-level=0' xtask secrets
+      - name: Check all WebAssembly layers
+        run: cargo --config 'profile.dev.package."*".opt-level=0' xtask wasm
+      - name: Require formatting and an unchanged tree
+        run: |
+          cargo fmt --all -- --check
+          git diff --check
+          git diff --exit-code

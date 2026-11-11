@@ -7,6 +7,7 @@ payloads = [
     ("ascii", b"Craft checksums.\n"),
     ("unicode", "校验🧪\n".encode()),
     ("repeated", b"native checksummed data\n" * 50),
+    ("multiblock", b"native checksummed data\n" * 10000 + bytes(range(256)) * 1024),
 ]
 cases = []
 constants = []
@@ -33,7 +34,8 @@ for name, plain in payloads:
     assert not free[4] & 4, name
     add(name + "-checked", frame, plain)
     add(name + "-unchecked", free, plain)
-    constants.append({"name": name, "plain": list(plain), "frame": list(frame), "unchecked": list(free)})
+    if len(plain) <= 1200:
+        constants.append({"name": name, "plain": list(plain), "frame": list(frame), "unchecked": list(free)})
     for index in range(4):
         bad = bytearray(frame)
         bad[-4 + index] ^= 0x80

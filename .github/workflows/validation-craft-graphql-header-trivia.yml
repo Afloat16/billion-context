@@ -62,7 +62,7 @@ jobs:
                   "fragment_header_comments_do_not_hide_later_operations",
                   "parsed_and_fallback_api_facts_keep_names_after_header_trivia",
                   "runtime_name_holes_after_comments_remain_unknown",
-        "comments_without_a_following_selection_set_are_not_operations",
+                  "comments_without_a_following_selection_set_are_not_operations",
               ]
               if result.returncode == 0 or "test result: FAILED. 2 passed; 8 failed;" not in result.stdout:
                   raise SystemExit("Original source did not reproduce eight failures and two passing controls")

@@ -47,7 +47,7 @@ jobs:
           source = pathlib.Path("crates/js/src/bundle.rs")
           fixed = source.read_bytes()
           try:
-              original = subprocess.check_output(["git", "show", "80ba512d9c8f147382af02ff89981cbad1195add:crates/js/src/bundle.rs"])
+              original = subprocess.check_output(["git", "show", "2cee4610f07164920ca9f02cd75cd84fa99cba3b:crates/js/src/bundle.rs"])
               source.write_bytes(original)
               result = subprocess.run(
                   ["cargo", "--config", 'profile.dev.package."*".opt-level=0', "test", "--locked", "-p", "craft-anything-js",

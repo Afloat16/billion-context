@@ -1,0 +1,92 @@
+name: Claude transparent callable comparison
+on:
+  push:
+    branches: [validation/claude-wrapped-callables-20261111]
+permissions:
+  contents: read
+jobs:
+  comparison:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: Afloat16/claude-mem
+          ref: de96e4867692718c1d124489e31741319a236ca9
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - name: Install repository dependencies
+        run: npm install --no-audit --no-fund
+      - name: Check and execute the actual JavaScript and TypeScript fixtures
+        shell: bash
+        run: |
+          node --check tests/services/smart-file-read/fixtures/wrapped-callables.mjs
+          mkdir -p "$RUNNER_TEMP/wrapped-callables"
+          cp tests/services/smart-file-read/fixtures/wrapped-callables.ts "$RUNNER_TEMP/wrapped-callables/common.tsx"
+          node_modules/.bin/tsc --ignoreConfig --noEmit --target ES2022 --module esnext --moduleResolution bundler --jsx preserve --skipLibCheck "$RUNNER_TEMP/wrapped-callables/common.tsx"
+          node_modules/.bin/tsc --ignoreConfig --target ES2022 --module esnext --moduleResolution bundler --skipLibCheck --outDir "$RUNNER_TEMP/wrapped-callables" tests/services/smart-file-read/fixtures/wrapped-callables.ts tests/services/smart-file-read/fixtures/wrapped-callables-angle.ts
+          cp "$RUNNER_TEMP/wrapped-callables/wrapped-callables.js" "$RUNNER_TEMP/wrapped-callables/wrapped-callables.mjs"
+          cp "$RUNNER_TEMP/wrapped-callables/wrapped-callables-angle.js" "$RUNNER_TEMP/wrapped-callables/wrapped-callables-angle.mjs"
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { pathToFileURL } from 'node:url';
+          import * as js from './tests/services/smart-file-read/fixtures/wrapped-callables.mjs';
+          assert.equal(js.parenthesizedArrow(10), 11);
+          assert.equal(js.parenthesizedFunction(10), 12);
+          assert.deepEqual([...js.parenthesizedGenerator(10)], [13]);
+          assert.equal(await js.parenthesizedAsync(10), 14);
+          const store = new js.WrappedStore();
+          assert.equal(store.deep(10), 16);
+          assert.equal(store.quoted(), 8);
+          assert.deepEqual([...store], [9]);
+          const directory = process.env.RUNNER_TEMP + '/wrapped-callables/';
+          const ts = await import(pathToFileURL(directory + 'wrapped-callables.mjs').href);
+          assert.equal(ts.asserted(10), 11);
+          assert.equal(ts.satisfied(10), 12);
+          assert.equal(ts.nonnull(10), 13);
+          assert.equal(ts.combined(10), 14);
+          assert.equal(ts.specialized(10), 10);
+          const typed = new ts.TypedStore();
+          assert.equal(typed.asserted(10), 15);
+          assert.equal(typed.satisfied(10), 16);
+          assert.equal(typed.nonnull(10), 17);
+          assert.equal(typed.combined(10), 18);
+          assert.equal(typed.specialized(10), 10);
+          const angle = await import(pathToFileURL(directory + 'wrapped-callables-angle.mjs').href);
+          assert.equal(angle.angleAsserted(10), 11);
+          assert.equal(new angle.AngleStore().angleAsserted(10), 12);
+          console.log('Actual Node execution passed: 19 callable value assertions.');
+          NODE
+      - name: Reproduce missing callable symbols on unchanged main
+        shell: bash
+        run: |
+          git fetch --no-tags --depth=1 origin 51ecfbe540b634f77eaa52e469b9bedadfd6b1e0 47e478908e475ba91feee28d97fb89fbf548a2f2
+          git checkout --detach 47e478908e475ba91feee28d97fb89fbf548a2f2
+          set +e
+          bun test tests/services/smart-file-read/wrapped-callable-values.test.ts --timeout 120000 2>&1 | tee "$RUNNER_TEMP/wrapped-callables-baseline.log"
+          result=${PIPESTATUS[0]}
+          set -e
+          test "$result" -eq 1
+          grep -F ' 8 fail' "$RUNNER_TEMP/wrapped-callables-baseline.log"
+          grep -F ' 5 pass' "$RUNNER_TEMP/wrapped-callables-baseline.log"
+          grep -F '(fail) transparent callable value wrappers > searches grouped functions' "$RUNNER_TEMP/wrapped-callables-baseline.log"
+      - name: Verify fixed native symbols search and unfold
+        run: |
+          git checkout --detach de96e4867692718c1d124489e31741319a236ca9
+          bun test tests/services/smart-file-read/wrapped-callable-values.test.ts --timeout 120000
+      - name: Run all native smart file regressions
+        run: bun test tests/services/smart-file-read --timeout 120000
+      - name: Check root and viewer TypeScript
+        run: npm run typecheck
+      - name: Build all shipped bundles
+        run: node scripts/build-hooks.js
+      - name: Check patch and lane ownership
+        run: |
+          git diff --check 51ecfbe540b634f77eaa52e469b9bedadfd6b1e0 HEAD
+          bun scripts/test-lanes.ts check

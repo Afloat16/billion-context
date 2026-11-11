@@ -1,0 +1,154 @@
+name: GraphQL header token validation
+
+on:
+  push:
+    branches: [validation/craft-graphql-header-trivia-20261111]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  graphql-headers:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      CARGO_INCREMENTAL: "0"
+      CARGO_BUILD_JOBS: "2"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+      CARGO_PROFILE_DEV_OPT_LEVEL: "0"
+      CARGO_TERM_COLOR: never
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: Afloat16/craft-anything
+          ref: 9a10d39539bcdf2c07ee8be1388a803b34d10034
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install Rust
+        run: |
+          rustup toolchain install 1.99.0 --profile minimal --component rustfmt --component clippy --target wasm32-unknown-unknown
+          rustup default 1.99.0
+          rustc --version
+          node --version
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
+        with:
+          key: craft-graphql-header-trivia-v1
+          save-if: true
+          cache-on-failure: true
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Reproduce the unchanged header failures and controls
+        run: |
+          python3 - <<'PY'
+          import pathlib
+          import subprocess
+          path = pathlib.Path("crates/js/src/api_ops.rs")
+          fixed = path.read_bytes()
+          try:
+              path.write_bytes(subprocess.check_output(["git", "show", "80479a9b9e07babe1a7a96252784cba9c9c31451:" + path.as_posix()]))
+              result = subprocess.run(
+                  ["cargo", "--config", 'profile.dev.package."*".opt-level=0', "test", "--locked",
+                   "-p", "craft-anything-js", "--test", "graphql_header_trivia", "--", "--nocapture"],
+                  text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+              )
+              print(result.stdout, end="")
+              failures = [
+                  "header_comments_do_not_hide_operation_names",
+                  "comment_punctuation_cannot_open_selection_sets",
+                  "comments_inside_variable_definitions_do_not_change_parenthesis_depth",
+                  "commas_and_byte_order_marks_do_not_hide_operation_names",
+                  "fragment_header_comments_do_not_hide_later_operations",
+                  "parsed_and_fallback_api_facts_keep_names_after_header_trivia",
+                  "runtime_name_holes_after_comments_remain_unknown",
+              ]
+              if result.returncode == 0 or "test result: FAILED. 3 passed; 7 failed;" not in result.stdout:
+                  raise SystemExit("Original source did not reproduce seven failures and three passing controls")
+              for name in failures:
+                  if "test " + name + " ... FAILED" not in result.stdout:
+                      raise SystemExit("Missing original-source failure: " + name)
+          finally:
+              path.write_bytes(fixed)
+          
+          PY
+      - name: Run the full JavaScript and analysis suites
+        run: cargo --config 'profile.dev.package."*".opt-level=0' test --locked -p craft-anything-js -p craft-anything-analysis
+      - name: Compare all production reader paths with GraphQL.js
+        run: |
+          npm install --prefix "$RUNNER_TEMP/craft-graphql-reference" --ignore-scripts --no-audit --no-fund graphql@16.11.0
+          mkdir -p crates/js/examples
+          trap 'rm -f crates/js/examples/validation_graphql_headers.rs' EXIT
+          cat > crates/js/examples/validation_graphql_headers.rs <<'RUST'
+          use std::io::Read;
+          use craft_anything_js::{Limits, analyze, api_ops::read_document};
+          
+          fn main() {
+              let mut document = String::new();
+              std::io::stdin().read_to_string(&mut document).unwrap();
+              let direct = read_document(&document, false).map(|doc| {
+                  doc.operations.into_iter().map(|op| serde_json::json!({"kind": op.kind, "name": op.name, "literal": op.literal})).collect::<Vec<_>>()
+              });
+              let source = format!("const document = {};", serde_json::to_string(&document).unwrap());
+              let parsed = analyze("client.js", &source, &Limits::default());
+              let fallback = analyze("client.js", &source, &Limits { max_parse_bytes: 0, ..Limits::default() });
+              println!("{}", serde_json::json!({"direct": direct, "parsed": parsed.facts.api_operations, "fallback": fallback.facts.api_operations}));
+          }
+          
+          RUST
+          cargo --config 'profile.dev.package."*".opt-level=0' build --locked -p craft-anything-js --example validation_graphql_headers
+          node <<'NODE'
+          const assert = require("node:assert/strict");
+          const path = require("node:path");
+          const { execFileSync } = require("node:child_process");
+          const { parse, version } = require(path.join(process.env.RUNNER_TEMP, "craft-graphql-reference/node_modules/graphql"));
+          const binary = path.resolve("target/debug/examples/validation_graphql_headers");
+          const fixtures = [];
+          for (const kind of ["query", "mutation", "subscription"]) {
+            for (const newline of ["\n", "\r", "\r\n"]) fixtures.push(kind + " # a different label" + newline + " Actual { field }");
+            for (const trivia of [",", "\uFEFF", ", \uFEFF,\t"]) fixtures.push(kind + trivia + "Actual { field }");
+          }
+          fixtures.push(
+            "query Actual # ignore ) } { \" punctuation\n { field }",
+            "query Actual($id: ID! # ignore ) { \"\n, $limit: Int = 1) { node(id: $id) { id } }",
+            "fragment # ignore ) { \"\n Part on User { id }\nquery Actual { user { ...Part } }",
+            "query # a label\n { field }",
+            "query , \uFEFF # label\r { field }",
+            "query Actual($note: String = \"# ) } {, \") { echo(note: $note) }",
+            "mutation Save { save } subscription Watch { changes }",
+            "query Plain { field }",
+          );
+          const normalize = rows => rows.filter(row => row.protocol === "graphql").map(row => ({ kind: row.kind, name: row.name ?? null, literal: row.literal }));
+          for (const [index, source] of fixtures.entries()) {
+            const expected = parse(source).definitions.filter(def => def.kind === "OperationDefinition")
+              .map(def => ({ kind: def.operation, name: def.name?.value ?? null, literal: true }));
+            const actual = JSON.parse(execFileSync(binary, { input: source, encoding: "utf8" }));
+            assert.deepEqual(actual.direct, expected, "document reader " + index);
+            assert.deepEqual(normalize(actual.parsed), expected, "parsed source " + index);
+            assert.deepEqual(normalize(actual.fallback), expected, "lexer source " + index);
+          }
+          const invalid = ["query # no selection", "query Actual # { field }", "query # comment only\r", "# query Actual { field }"];
+          for (const source of invalid) {
+            assert.throws(() => parse(source));
+            const actual = JSON.parse(execFileSync(binary, { input: source, encoding: "utf8" }));
+            assert.equal(actual.direct, null);
+            assert.deepEqual(normalize(actual.parsed), []);
+            assert.deepEqual(normalize(actual.fallback), []);
+          }
+          assert.equal(fixtures.length, 26);
+          console.log("GraphQL.js " + version + ": all 26 valid fixtures match across three production reader paths; four invalid controls are rejected.");
+          
+          NODE
+      - name: Run strict all-target Clippy
+        run: cargo --config 'profile.dev.package."*".opt-level=0' clippy --locked -p craft-anything-js -p craft-anything-analysis --all-targets -- -D warnings
+      - name: Check repository contracts
+        run: |
+          cargo --config 'profile.dev.package."*".opt-level=0' xtask layers
+          cargo --config 'profile.dev.package."*".opt-level=0' xtask locks
+          cargo --config 'profile.dev.package."*".opt-level=0' xtask secrets
+      - name: Check all WebAssembly layers
+        run: cargo --config 'profile.dev.package."*".opt-level=0' xtask wasm
+      - name: Require formatting and an unchanged tree
+        run: |
+          cargo fmt --all -- --check
+          git diff --exit-code

@@ -19,12 +19,12 @@ jobs:
       CARGO_PROFILE_TEST_DEBUG: "0"
       CARGO_PROFILE_DEV_OPT_LEVEL: "0"
       CARGO_TERM_COLOR: never
-      SOURCE_HEAD: 2f282c305c4af80daa89b597b393a03b3397439a
+      SOURCE_HEAD: 422bbdcaa8b687ad4d68f2dc8997bfa2a4aea10e
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: Afloat16/craft-anything
-          ref: 2f282c305c4af80daa89b597b393a03b3397439a
+          ref: 422bbdcaa8b687ad4d68f2dc8997bfa2a4aea10e
           fetch-depth: 0
           persist-credentials: false
       - name: Install Rust
@@ -35,7 +35,7 @@ jobs:
           node --version
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
         with:
-          key: craft-ignore-globstar-full-v1
+          key: craft-ignore-globstar-full-v2
           save-if: true
           cache-on-failure: true
       - name: Check formatting
@@ -171,7 +171,7 @@ jobs:
           path = pathlib.Path("crates/analysis/src/js_source.rs")
           fixed = path.read_bytes()
           base = "adeddc9149b97c21e595e743c9875d84e805eece"
-          head = "2f282c305c4af80daa89b597b393a03b3397439a"
+          head = "422bbdcaa8b687ad4d68f2dc8997bfa2a4aea10e"
           evidence = {}
           try:
               for variant, source, content in [

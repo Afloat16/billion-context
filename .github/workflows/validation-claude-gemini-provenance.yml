@@ -1,0 +1,35 @@
+name: Claude native Gemini provenance fix
+on:
+  push:
+    branches: [validation/claude-gemini-provenance-fix-20261111]
+permissions:
+  contents: read
+jobs:
+  fixed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: Afloat16/claude-mem
+          ref: 9a0c6828851c465af57e60b67b95e0a0ab9f3afa
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - name: Install repository dependencies
+        run: npm install --no-audit --no-fund
+      - name: Validate native Gemini provenance through scan and SQLite
+        run: bun test tests/services/prompt-import/gemini-native-provenance.test.ts --timeout 30000
+      - name: Run all prompt import behavioral suites
+        run: bun test tests/services/prompt-import/ --timeout 30000
+      - name: Check root and viewer TypeScript
+        run: npm run typecheck
+      - name: Build all shipped bundles
+        run: node scripts/build-hooks.js
+      - name: Check patch whitespace
+        run: git diff --check HEAD^ HEAD

@@ -1,4 +1,4 @@
-name: JavaScript literal fingerprint final-document validation
+name: JavaScript fingerprint framing diagnostic
 
 on:
   push:
@@ -35,19 +35,53 @@ jobs:
           key: craft-js-literal-fingerprints-full-v1
           save-if: true
           cache-on-failure: true
-      - name: Verify unchanged implementation, tests and dependencies
+      - name: Compare previous-head fingerprints with actual JavaScript results
         run: |
-          python3 - <<'PY'
-          import subprocess
-          base = "b6864b6e0d2b324a7bba31e2dcdddc0c7ade433c"
-          changed = set(subprocess.check_output(["git", "diff", "--name-only", base, "HEAD"], text=True).splitlines())
-          assert changed == {"docs/ROADMAP.md", "docs/STATUS.md"}, changed
-          subprocess.run(["git", "diff", "--exit-code", base, "HEAD", "--", ".", ":(exclude)docs/ROADMAP.md", ":(exclude)docs/STATUS.md"], check=True)
-          print("All implementation, test and dependency files are identical to the fully validated source.")
-          PY
-      - name: Validate final documents
-        run: |
-          cargo fmt --all -- --check
-          cargo --config 'profile.dev.package."*".opt-level=0' xtask secrets
-          git diff --check b6864b6e0d2b324a7bba31e2dcdddc0c7ade433c HEAD
-          git diff --exit-code
+          mkdir -p crates/js/examples
+          trap 'rm -f crates/js/examples/validation_literal_framing.rs' EXIT
+          cat > crates/js/examples/validation_literal_framing.rs <<'RUST'
+          use craft_anything_js::{Limits, analyze};
+          use std::io::Read;
+          
+          fn main() {
+              let mut source = String::new();
+              std::io::stdin().read_to_string(&mut source).unwrap();
+              let facts = analyze("module.js", &source, &Limits::default()).facts;
+              println!("{}", serde_json::json!({"fingerprint": facts.fingerprint}));
+          }
+          RUST
+          cargo --config 'profile.dev.package."*".opt-level=0' build --locked -p craft-anything-js --example validation_literal_framing
+          node <<'NODE'
+          const assert = require("node:assert/strict");
+          const path = require("node:path");
+          const vm = require("node:vm");
+          const { execFileSync } = require("node:child_process");
+          const binary = path.resolve("target/debug/examples/validation_literal_framing");
+          const pairs = [
+            { label: "nul-string-node-boundary", left: 'globalThis.result = ["a","b"];',
+              right: "globalThis.result = " + JSON.stringify(["a\0StringLiteral;b"]) + ";", equivalent: false },
+            { label: "empty-array-tree-boundary", left: "globalThis.result = [[], []];",
+              right: "globalThis.result = [[[]]];", equivalent: false },
+            { label: "escaped-nul-equivalence-control", left: String.raw`globalThis.result = ["a\0b"];`,
+              right: String.raw`globalThis.result = ["a\u0000b"];`, equivalent: true },
+          ];
+          const rows = pairs.map(({ label, left, right, equivalent }) => {
+            const execute = source => {
+              const context = {};
+              vm.runInNewContext(source, context, { timeout: 1000 });
+              return JSON.stringify(context.result);
+            };
+            const results = [execute(left), execute(right)];
+            assert.equal(results[0] === results[1], equivalent, label);
+            const hashes = [left, right].map(source => JSON.parse(execFileSync(binary, { input: source, encoding: "utf8" })).fingerprint);
+            const row = { label, equivalent, results, hashes, fingerprintsEqual: hashes[0] === hashes[1] };
+            console.log("LITERAL_FRAMING_ROW " + JSON.stringify(row));
+            return row;
+          });
+          assert.ok(rows.some(row => !row.equivalent && row.fingerprintsEqual), "the previous head must reproduce a framing collision");
+          assert.ok(rows.filter(row => row.equivalent).every(row => row.fingerprintsEqual));
+          console.log("LITERAL_FRAMING_EVIDENCE " + JSON.stringify({ node: process.version, cases: rows.length,
+            semanticCollisions: rows.filter(row => !row.equivalent && row.fingerprintsEqual).length }));
+          NODE
+      - name: Require unchanged source
+        run: git diff --exit-code

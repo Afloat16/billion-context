@@ -1,27 +1,70 @@
-name: Craft Go build information preparation
+name: Craft Go diagnostic memory validation
 on:
   push:
     branches: [validation/craft-go-buildinfo-diagnostics-20261111]
 permissions:
   contents: read
 jobs:
-  formatting:
+  go-diagnostics:
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 70
+    defaults:
+      run:
+        working-directory: candidate
+    env:
+      CARGO_INCREMENTAL: "0"
+      CARGO_BUILD_JOBS: "2"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+      CARGO_PROFILE_DEV_OPT_LEVEL: "0"
+      CARGO_PROFILE_RELEASE_DEBUG: "0"
+      CARGO_PROFILE_RELEASE_LTO: "false"
+      CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
+      CARGO_TERM_COLOR: never
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          path: validation
+          persist-credentials: false
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: Afloat16/craft-anything
           ref: da3e2b157a5e0d9dfb98dafe2fe9646159719a4f
-          persist-credentials: false
+          path: candidate
           fetch-depth: 2
-      - name: Install CI formatting toolchain
+          persist-credentials: false
+      - name: Build original native Go controls and bounded candidate fixtures
         run: |
-          rustup toolchain install 1.99.0 --profile minimal --component rustfmt
+          python3 "$GITHUB_WORKSPACE/validation/.github/validation/go_diagnostic_fixtures.py" --out "$RUNNER_TEMP/go-diagnostics"
+          echo "GO_DIAGNOSTIC_FIXTURES=$RUNNER_TEMP/go-diagnostics" >> "$GITHUB_ENV"
+      - name: Install exact CI Rust with formatting, Clippy and WebAssembly
+        run: |
+          rustup toolchain install 1.99.0 --profile minimal --component rustfmt --component clippy --target wasm32-unknown-unknown
           rustup default 1.99.0
-      - name: Review formatting delta and native compiler availability
+          rustc --version
+      - name: Check committed formatting
+        run: cargo fmt --all -- --check
+      - name: Compare actual public API reports and fresh-process memory use
         run: |
-          cargo fmt --all
-          git diff --stat
-          git diff -- crates/formats/src/go.rs crates/formats/tests/go_buildinfo_diagnostics.rs
-          go version
+          git fetch --no-tags --depth=1 origin 3ce1ce9f52077a53811be8a0309fdbe85b16b417
+          mkdir -p crates/formats/examples
+          cp "$GITHUB_WORKSPACE/validation/.github/validation/go_buildinfo_diagnostic_probe.rs" crates/formats/examples/go_buildinfo_diagnostic_probe.rs
+          python3 "$GITHUB_WORKSPACE/validation/.github/validation/go_diagnostic_compare.py"
+          rm crates/formats/examples/go_buildinfo_diagnostic_probe.rs
+          git diff --exit-code
+      - name: Run the complete formats suite
+        run: cargo --config 'profile.dev.package."*".opt-level=0' test --locked --no-fail-fast -p craft-anything-formats
+      - name: Run strict all-target formats Clippy
+        run: cargo --config 'profile.dev.package."*".opt-level=0' clippy --locked -p craft-anything-formats --all-targets -- -D warnings
+      - name: Check repository layer, lock and secret contracts
+        run: |
+          cargo --config 'profile.dev.package."*".opt-level=0' xtask layers
+          cargo --config 'profile.dev.package."*".opt-level=0' xtask locks
+          cargo --config 'profile.dev.package."*".opt-level=0' xtask secrets
+      - name: Check complete five-crate WebAssembly gate
+        run: cargo --config 'profile.dev.package."*".opt-level=0' xtask wasm
+      - name: Check patch whitespace and clean checkout
+        run: |
+          git diff --check 3ce1ce9f52077a53811be8a0309fdbe85b16b417 HEAD
+          git diff --exit-code
+          test -z "$(git ls-files --others --exclude-standard)"

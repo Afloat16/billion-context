@@ -1,0 +1,61 @@
+name: Claude Java compact constructor comparison
+on:
+  push:
+    branches: [validation/claude-java-compact-constructors-20261111]
+permissions:
+  contents: read
+jobs:
+  comparison:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: Afloat16/claude-mem
+          ref: 2016191510990e8f599c72f2b1af9a68dd29cfde
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install repository dependencies
+        run: npm install --no-audit --no-fund
+      - name: Verify actual Java syntax and native parser prerequisites
+        run: |
+          javac --version
+          mkdir -p "$RUNNER_TEMP/java-compact-classes"
+          javac --release 17 -d "$RUNNER_TEMP/java-compact-classes" tests/services/smart-file-read/fixtures/compact-constructors.java
+          node_modules/.bin/tree-sitter --version
+      - name: Reproduce missing compact constructors on unchanged main
+        shell: bash
+        run: |
+          git fetch --no-tags --depth=1 origin 8a82b1efa1c37ba976e3d85c9e7b8b38b6e537a8
+          git checkout --detach 8a82b1efa1c37ba976e3d85c9e7b8b38b6e537a8
+          set +e
+          bun test tests/services/smart-file-read/java-compact-constructors.test.ts --timeout 120000 2>&1 | tee "$RUNNER_TEMP/java-compact-baseline.log"
+          result=${PIPESTATUS[0]}
+          set -e
+          test "$result" -eq 1
+          grep -F '5 fail' "$RUNNER_TEMP/java-compact-baseline.log"
+          grep -F '1 pass' "$RUNNER_TEMP/java-compact-baseline.log"
+      - name: Verify fixed native outline search and unfold
+        run: |
+          git checkout --detach 2016191510990e8f599c72f2b1af9a68dd29cfde
+          bun test tests/services/smart-file-read/java-compact-constructors.test.ts --timeout 120000
+      - name: Run all native smart file regressions
+        run: bun test tests/services/smart-file-read --timeout 120000
+      - name: Check root and viewer TypeScript
+        run: npm run typecheck
+      - name: Build all shipped bundles
+        run: node scripts/build-hooks.js
+      - name: Check patch and lane ownership
+        run: |
+          git diff --check 308a9ab4a141ac49ca0e72bbccc0c9cdf3770ca0 HEAD
+          bun scripts/test-lanes.ts check

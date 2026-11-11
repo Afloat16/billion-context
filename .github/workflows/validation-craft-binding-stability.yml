@@ -1,0 +1,216 @@
+name: JavaScript binding-stability native baseline
+
+on:
+  push:
+    branches: [validation/craft-binding-stability-20261111]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  binding-stability:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      CARGO_INCREMENTAL: "0"
+      CARGO_BUILD_JOBS: "2"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+      CARGO_PROFILE_DEV_OPT_LEVEL: "0"
+      CARGO_TERM_COLOR: never
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: Afloat16/craft-anything
+          ref: 3ce1ce9f52077a53811be8a0309fdbe85b16b417
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install Rust
+        run: |
+          rustup toolchain install 1.99.0 --profile minimal
+          rustup default 1.99.0
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
+        with:
+          key: craft-binding-stability-native-v1
+          save-if: true
+          cache-on-failure: true
+      - name: Compare inferred binding identities with actual Node execution
+        run: |
+          node --version
+          mkdir -p crates/js/examples
+          trap 'rm -f crates/js/examples/validation_binding_stability.rs' EXIT
+          cat > crates/js/examples/validation_binding_stability.rs <<'RS'
+          use craft_anything_js::{Limits, analyze};
+          use serde_json::json;
+          use std::io::Read;
+          
+          fn main() {
+              let mut source = String::new();
+              std::io::stdin().read_to_string(&mut source).unwrap();
+              let facts = analyze("fixture.cjs", &source, &Limits::default()).facts;
+              assert_eq!(facts.parse_errors, 0);
+              println!("{}", json!({
+                  "imports":facts.imports.iter().map(|item| json!({"value":item.specifier,"literal":item.literal})).collect::<Vec<_>>(),
+                  "ipc":facts.ipc.iter().map(|item| item.channel.clone()).collect::<Vec<_>>(),
+                  "exposed":facts.exposed.iter().map(|item| json!({"key":item.key,"members":item.members.iter().map(|m| m.name.clone()).collect::<Vec<_>>()})).collect::<Vec<_>>(),
+              }));
+          }
+          RS
+          cargo --config 'profile.dev.package."*".opt-level=0' build --locked -p craft-anything-js --example validation_binding_stability
+          cat > /tmp/validation_binding_stability.js <<'JS'
+          const assert = require("node:assert/strict");
+          const cp = require("node:child_process");
+          const vm = require("node:vm");
+          const CASES = [
+            [
+              "assignment",
+              "let channel='old'; channel='new'; ipcRenderer.send(channel);",
+              true
+            ],
+            [
+              "compound",
+              "let channel='old'; channel+=':new'; ipcRenderer.send(channel);",
+              true
+            ],
+            [
+              "array_assignment",
+              "let channel='old'; [channel]=['new']; ipcRenderer.send(channel);",
+              true
+            ],
+            [
+              "object_assignment",
+              "let channel='old'; ({channel}={channel:'new'}); ipcRenderer.send(channel);",
+              true
+            ],
+            [
+              "closure_write",
+              "let channel='old'; function change(){channel='new'} change(); ipcRenderer.send(channel);",
+              true
+            ],
+            [
+              "deferred_read",
+              "let channel='old'; const send=()=>ipcRenderer.send(channel); channel='new'; send();",
+              true
+            ],
+            [
+              "for_of",
+              "let channel='old'; for(channel of ['new']) ipcRenderer.send(channel);",
+              true
+            ],
+            [
+              "for_in",
+              "let path='./old.js'; for(path in {'./new.js':1}) require(path);",
+              true
+            ],
+            [
+              "update",
+              "let step=1; step++; require('./step'+step+'.js');",
+              true
+            ],
+            [
+              "import_assignment",
+              "let path='./old.js'; path='./new.js'; require(path);",
+              true
+            ],
+            [
+              "alias_assignment",
+              "let send=require('electron').ipcRenderer.send; send=()=>{}; send('fake');",
+              true
+            ],
+            [
+              "destructured_alias",
+              "let {send}=require('electron').ipcRenderer; ({send}={send:()=>{}}); send('fake');",
+              true
+            ],
+            [
+              "object_members",
+              "let bridge={ping(){}}; bridge={}; contextBridge.exposeInMainWorld('api',bridge);",
+              true
+            ],
+            [
+              "shadowed_write",
+              "let channel='outer'; {let channel='inner'; channel='changed'; ipcRenderer.send(channel);} ipcRenderer.send(channel);",
+              true
+            ],
+            [
+              "redeclaration",
+              "var channel='old'; function send(){ipcRenderer.send(channel)} var channel='new'; send();",
+              true
+            ],
+            [
+              "stable_const",
+              "const channel='fixed'; ipcRenderer.send(channel);",
+              false
+            ],
+            [
+              "stable_let",
+              "let channel='fixed'; ipcRenderer.send(channel);",
+              false
+            ],
+            [
+              "stable_alias",
+              "const send=require('electron').ipcRenderer.send; send('real');",
+              false
+            ],
+            [
+              "stable_shadow",
+              "const channel='outer'; {const channel='inner'; ipcRenderer.send(channel);} ipcRenderer.send(channel);",
+              false
+            ]
+          ];
+          
+          function runtime(source) {
+            const observed = {imports:[], ipc:[], exposed:[]};
+            const ipc = {
+              send(channel) { observed.ipc.push(channel); },
+              invoke(channel) { observed.ipc.push(channel); },
+            };
+            const contextBridge = {
+              exposeInMainWorld(key, value) { observed.exposed.push({key, members:Object.keys(value)}); },
+            };
+            const requireFixture = specifier => {
+              observed.imports.push(specifier);
+              return {ipcRenderer:ipc, ipcMain:ipc, contextBridge};
+            };
+            vm.runInNewContext(source, {require:requireFixture, ipcMain:ipc, ipcRenderer:ipc, contextBridge}, {timeout:1000});
+            return observed;
+          }
+          let incorrectTotal = 0, unknownTotal = 0;
+          for (const [name, source, wasIncorrect] of CASES) {
+            const expected = runtime(source);
+            const run = cp.spawnSync("target/debug/examples/validation_binding_stability", [], {input:source,encoding:"utf8"});
+            assert.equal(run.status,0,run.stderr);
+            const actual = JSON.parse(run.stdout);
+            let incorrect=0, unknown=0;
+            for (let i=0;i<actual.imports.length;i++) {
+              const item=actual.imports[i];
+              if (!item.literal) unknown++;
+              else if (item.value!==expected.imports[i]) incorrect++;
+            }
+            for (let i=0;i<actual.ipc.length;i++) {
+              const value=actual.ipc[i];
+              if (value===null) unknown++;
+              else if (value!==expected.ipc[i]) incorrect++;
+            }
+            for (let i=0;i<actual.exposed.length;i++) {
+              const item=actual.exposed[i], wanted=expected.exposed[i];
+              if (!wanted || item.key!==wanted.key || item.members.some(member=>!wanted.members.includes(member))) incorrect++;
+            }
+            if (process.env.EXPECT_FIXED) assert.equal(incorrect,0,name);
+            else assert.equal(incorrect>0,wasIncorrect,name);
+            if (!wasIncorrect) {
+              assert.equal(unknown,0,name);
+              assert.deepEqual(actual.imports.map(x=>x.value),expected.imports,name);
+              assert.deepEqual(actual.ipc,expected.ipc,name);
+              assert.deepEqual(actual.exposed,expected.exposed,name);
+            }
+            incorrectTotal+=incorrect;
+            unknownTotal+=unknown;
+            console.log(JSON.stringify({name,incorrect,unknown,expected,actual}));
+          }
+          console.log(JSON.stringify({node:process.version,cases:CASES.length,incorrect_concrete_facts:incorrectTotal,unknown_values:unknownTotal,controls:CASES.filter(x=>!x[2]).length}));
+          JS
+          node /tmp/validation_binding_stability.js
+      - name: Require an unchanged source tree
+        run: test -z "$(git status --porcelain)"

@@ -1,0 +1,35 @@
+name: Claude compressed Codex history fix
+on:
+  push:
+    branches: [validation/claude-codex-compressed-fix-20261111]
+permissions:
+  contents: read
+jobs:
+  fixed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: Afloat16/claude-mem
+          ref: ddc8e7ad326a9ff1bc06bf120591f1fa25462165
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - name: Install repository dependencies
+        run: npm install --no-audit --no-fund
+      - name: Validate compressed Codex history through scan and SQLite
+        run: bun test tests/services/prompt-import/codex-compressed-history.test.ts --timeout 30000
+      - name: Run all prompt import behavioral suites
+        run: bun test tests/services/prompt-import/ --timeout 30000
+      - name: Check root and viewer TypeScript
+        run: npm run typecheck
+      - name: Build all shipped bundles
+        run: node scripts/build-hooks.js
+      - name: Check patch whitespace
+        run: git diff --check HEAD^ HEAD

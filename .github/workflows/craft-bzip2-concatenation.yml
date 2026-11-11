@@ -1,0 +1,36 @@
+name: Probe bzip2 concatenation against native libbz2
+on:
+  push:
+    branches: ["validation/craft-bzip2-concatenation-20261111"]
+permissions:
+  contents: read
+jobs:
+  baseline:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          path: validation
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: storytold/craft-anything
+          ref: 86d047cbc5368ca595c83e045893fb39c7f3f7f8
+          path: base
+          persist-credentials: false
+      - name: Install fixed Rust
+        run: rustup toolchain install 1.99.0 --profile minimal
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
+        with:
+          workspaces: base -> target
+          shared-key: craft-bzip2-concat-1.99
+      - name: Build unchanged public decoder
+        run: |
+          mkdir -p base/crates/formats/examples
+          cp validation/.github/validation/bzip2_probe.rs base/crates/formats/examples/bzip2_probe.rs
+          cd base
+          cargo +1.99.0 build --locked -p craft-anything-formats --example bzip2_probe
+          git diff --exit-code
+      - name: Compare independently compressed streams and full outputs
+        run: python3 validation/.github/validation/bzip2_native.py

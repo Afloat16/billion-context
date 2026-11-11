@@ -1,19 +1,19 @@
-name: Claude legacy prompt feed window comparison
+name: Claude legacy prompt feed final gates
 on:
   push:
     branches: [validation/claude-legacy-prompt-window-20261111]
 permissions:
   contents: read
 jobs:
-  comparison:
+  final:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
         with:
           repository: Afloat16/claude-mem
-          ref: 864dd004f919ef2158d58229f900a3edb9c55f36
-          fetch-depth: 2
+          ref: 7487cc5d29d2b7f7fed598999e2704e0ec9b74ea
+          fetch-depth: 4
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
@@ -23,117 +23,19 @@ jobs:
           bun-version: 1.4.4
       - name: Install repository dependencies
         run: npm install --no-audit --no-fund
-      - name: Prepare the actual production-query benchmark
-        shell: bash
+      - name: Check source identity with the measured implementation
         run: |
-          git fetch --no-tags --depth=1 origin ef0051e57af8cbea0160b13a47bf0bee2706e94d
-          cat > "$RUNNER_TEMP/prompt-feed-benchmark.ts" <<'BENCHMARK'
-          import { mkdtempSync, rmSync } from 'node:fs';
-          import { tmpdir } from 'node:os';
-          import { join } from 'node:path';
-          import { createHash } from 'node:crypto';
-          const directory = mkdtempSync(join(tmpdir(), 'owned-prompt-feed-benchmark-'));
-          process.env.CLAUDE_MEM_DATA_DIR = join(directory, 'data');
-          process.env.CLAUDE_CONFIG_DIR = join(directory, 'config');
-          process.env.CLAUDE_MEM_RUNTIME = 'worker';
-          process.env.CLAUDE_MEM_TELEMETRY_ENABLED = 'false';
-          const { SessionStore } = await import(process.cwd() + '/src/services/sqlite/SessionStore.ts');
-          const { PaginationHelper } = await import(process.cwd() + '/src/services/worker/PaginationHelper.ts');
-          let store;
-          try {
-            const database = join(directory, 'history.db');
-            store = new SessionStore(database, { syncOpsEnabled: false });
-            const session = store.createSDKSession('owned-history', 'owned-project', 'Owned history fixture');
-            const insert = store.db.prepare(
-              'INSERT INTO user_prompts (session_db_id, content_session_id, prompt_number, prompt_text, created_at, created_at_epoch) VALUES (?, ?, ?, ?, ?, ?)'
-            );
-            const seedStart = performance.now();
-            store.db.transaction(() => {
-              for (let i = 0; i < 12000; i++) {
-                const at = 1700000000000 + i * 5000;
-                insert.run(session, 'owned-history', i + 1, 'Owned distinct prompt ' + i, new Date(at).toISOString(), at);
-              }
-            })();
-            const seedMs = performance.now() - seedStart;
-            // Also measure opening existing history rather than only an empty schema.
-            store.db.run('DROP INDEX IF EXISTS idx_user_prompts_legacy_window');
-            store.close();
-            const reopenStart = performance.now();
-            store = new SessionStore(database, { syncOpsEnabled: false });
-            const reopenMs = performance.now() - reopenStart;
-            const helper = new PaginationHelper({ getSessionStore: () => store });
-            const read = offset => helper.getPrompts(offset, 50, 'owned-project', undefined, 'owned-history');
-            const digest = page => createHash('sha256').update(JSON.stringify(page)).digest('hex');
-            read(0); read(6000);
-            const firstMs = [], deepMs = [];
-            let first, deep;
-            for (let round = 0; round < 5; round++) {
-              let at = performance.now(); first = read(0); firstMs.push(performance.now() - at);
-              at = performance.now(); deep = read(6000); deepMs.push(performance.now() - at);
-            }
-            const originalPrepare = store.db.prepare.bind(store.db);
-            let actualSql;
-            store.db.prepare = sql => {
-              if (sql.includes('FROM user_prompts up') && sql.includes('NOT EXISTS')) actualSql = sql;
-              return originalPrepare(sql);
-            };
-            read(6000);
-            const plan = originalPrepare('EXPLAIN QUERY PLAN ' + actualSql)
-              .all('owned-project', 'owned-history', 10000, 51, 6000);
-            const median = values => [...values].sort((a, b) => a - b)[2];
-            console.log(JSON.stringify({
-              label: process.env.FIXTURE_LABEL, bun: Bun.version,
-              rows: 12000, pageSize: 50, deepOffset: 6000, rounds: 5,
-              firstMs, deepMs, firstMedianMs: median(firstMs), deepMedianMs: median(deepMs),
-              seedMs, reopenMs, firstDigest: digest(first), deepDigest: digest(deep),
-              firstCount: first.items.length, deepCount: deep.items.length, plan,
-            }));
-          } finally {
-            store?.close();
-            rmSync(directory, { recursive: true, force: true });
-          }
-          BENCHMARK
-      - name: Reproduce the unbounded lookup on unchanged main
-        shell: bash
-        run: |
-          git checkout --detach ef0051e57af8cbea0160b13a47bf0bee2706e94d
-          set +e
-          bun test tests/worker/prompt-feed-window.test.ts --timeout 30000 2>&1 | tee "$RUNNER_TEMP/prompt-feed-baseline.log"
-          result=${PIPESTATUS[0]}
-          set -e
-          test "$result" -eq 1
-          grep -F '1 fail' "$RUNNER_TEMP/prompt-feed-baseline.log"
-          grep -F '4 pass' "$RUNNER_TEMP/prompt-feed-baseline.log"
-      - name: Measure main on a fresh owned 12000-prompt database
-        shell: bash
-        run: |
-          FIXTURE_LABEL=main bun "$RUNNER_TEMP/prompt-feed-benchmark.ts" | tee "$RUNNER_TEMP/prompt-feed-main.jsonl"
-      - name: Measure the fixed production helper on the same runner
-        shell: bash
-        run: |
-          git checkout --detach 864dd004f919ef2158d58229f900a3edb9c55f36
-          FIXTURE_LABEL=fixed bun "$RUNNER_TEMP/prompt-feed-benchmark.ts" | tee "$RUNNER_TEMP/prompt-feed-fixed.jsonl"
-      - name: Compare actual pages and repeated measurements
-        shell: bash
-        run: |
-          node --input-type=module <<'COMPARE'
-          import fs from 'node:fs';
-          const read = name => JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP + '/prompt-feed-' + name + '.jsonl', 'utf8').trim().split('\n').at(-1));
-          const main = read('main'), fixed = read('fixed');
-          if (main.firstDigest !== fixed.firstDigest || main.deepDigest !== fixed.deepDigest) throw new Error('Production page contents changed');
-          if (main.firstCount !== 50 || main.deepCount !== 50 || fixed.firstCount !== 50 || fixed.deepCount !== 50) throw new Error('Unexpected page size');
-          console.log(JSON.stringify({ main, fixed, deepRatio: main.deepMedianMs / fixed.deepMedianMs }));
-          if (!(fixed.deepMedianMs < main.deepMedianMs / 2)) throw new Error('No substantial measured improvement for the owned fixture');
-          COMPARE
-      - name: Verify the final retry-window and pagination regressions
+          git diff --exit-code 864dd004f919ef2158d58229f900a3edb9c55f36 HEAD -- src
+          git diff --exit-code f764afcfddfd8ddce916e7948abdf283fc3eaf9e HEAD -- tests/worker/prompt-feed-window.test.ts
+      - name: Verify the bounded retry-window and pagination behavior
         run: bun test tests/worker/prompt-feed-window.test.ts --timeout 30000
-      - name: Run related native prompt and data-feed suites
+      - name: Check native prompt migrations and existing feed behavior
         run: bun test tests/worker/pagination-helper-content-session-id.test.ts tests/sqlite/native-prompt-identity.test.ts tests/worker/http/routes/data-native-prompts.test.ts tests/worker/http/routes/data-native-prompt-import.test.ts tests/worker/http/routes/data-pagination-bounds.test.ts tests/worker/http/routes/native-prompt-init.test.ts tests/worker/http/routes/listing-project-scope.test.ts --timeout 30000
       - name: Check root and viewer TypeScript
         run: npm run typecheck
       - name: Build all shipped bundles
         run: node scripts/build-hooks.js
-      - name: Check the patch and test-lane ownership
+      - name: Check patch and lane ownership
         run: |
           git diff --check 308a9ab4a141ac49ca0e72bbccc0c9cdf3770ca0 HEAD
           bun scripts/test-lanes.ts check

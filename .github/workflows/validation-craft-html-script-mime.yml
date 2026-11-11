@@ -23,7 +23,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: Afloat16/craft-anything
-          ref: 2ad1606916aad22fdb60caa0fd59a3bf0f1d9975
+          ref: 065ee63931e87af314a222e315b73c491d27bdac
           fetch-depth: 0
           persist-credentials: false
       - name: Install Rust
@@ -55,7 +55,7 @@ jobs:
               }),
               ("craft-anything-analysis", 1, {
                   "unsupported_script_versions_do_not_invent_inline_endpoints",
-                  "unsupported_script_versions_do_not_create_renderer_imports",
+                  "unsupported_script_versions_do_not_create_page_imports",
               }),
           ]
           try:

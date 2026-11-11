@@ -33,6 +33,7 @@ jobs:
       - name: Confirm the prefix regression on unmodified master
         shell: bash
         run: |
+          git fetch --no-tags --depth=1 origin dc041dd1ab1a014efa352ba47a6f31fc47f55284
           git show dc041dd1ab1a014efa352ba47a6f31fc47f55284:src/storage/store.ts > src/storage/store.ts
           git show dc041dd1ab1a014efa352ba47a6f31fc47f55284:src/storage/mysql.ts > src/storage/mysql.ts
           set +e

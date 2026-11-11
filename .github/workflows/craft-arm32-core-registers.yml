@@ -1,23 +1,77 @@
-name: Produce ARM32 and Thumb core evidence with QEMU and GDB
+name: Validate ARM32 core registers against QEMU and GDB
 on:
   push:
     branches: ["validation/craft-arm32-core-registers-20261111"]
 permissions:
   contents: read
 jobs:
-  native:
+  validate:
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 40
+    env:
+      CARGO_TERM_COLOR: never
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           path: validation
           persist-credentials: false
-      - name: Install native core producers and independent debugger
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: Afloat16/craft-anything
+          ref: 3c383fee4dd2f78b3e5a448d35e0cf6eb1c08afb
+          fetch-depth: 2
+          path: base
+          persist-credentials: false
+      - name: Install the verified native core tools
         run: |
           sudo apt-get install -y --no-install-recommends qemu-user=1:8.2.2+ds-0ubuntu1.18 gdb-multiarch=15.1-1ubuntu1~24.04.1 lld-18
           gdb-multiarch -nx -q -batch -ex 'python import time; print("GDB_PYTHON_READY")'
-          clang --version
           ld.lld-18 --version
-      - name: Execute four owned ARM programs and read the resulting guest cores
+      - name: Execute four owned ARM programs and read the guest cores with GDB
         run: python3 validation/.github/validation/arm_core_native.py
+      - name: Install fixed Rust tools
+        run: rustup toolchain install 1.99.0 --profile minimal --component rustfmt --component clippy --target wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
+        with:
+          workspaces: base -> target
+          shared-key: craft-arm32-core-1.99
+          cache-on-failure: true
+      - name: Format the proposed files
+        working-directory: base
+        run: |
+          rustup override set 1.99.0
+          cargo fmt --all
+      - name: Compare unchanged and corrected readers against native evidence and regressions
+        run: python3 validation/.github/validation/arm_core_full_compare.py
+      - name: Complete both consumer suites and the shared fixture suite
+        working-directory: base
+        run: |
+          cargo fmt --all --check
+          cargo test --locked -p craft-anything-formats -p craft-anything-engine -p craft-anything-testkit --no-fail-fast
+          cargo clippy --locked -p craft-anything-formats -p craft-anything-engine -p craft-anything-testkit --all-targets -- -D warnings
+      - name: Validate contracts and all L0-L2 WebAssembly targets
+        working-directory: base
+        run: |
+          cargo xtask layers
+          cargo xtask locks
+          cargo xtask secrets
+          cargo xtask wasm
+          git diff --check
+      - name: Export fully validated files and assert their scope
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib, json, subprocess
+          root=Path("base")
+          paths=["crates/formats/src/elf.rs","crates/testkit/src/lib.rs","crates/testkit/src/elf_core.rs","crates/formats/tests/elf_arm_core_registers.rs","crates/engine/tests/elf_arm_crash_evidence.rs"]
+          output=subprocess.check_output(["git","status","--porcelain","--untracked-files=all"],cwd=root,text=True)
+          changed={line[3:] for line in output.splitlines()}
+          assert changed.issubset(set(paths)), output
+          hashes={}
+          for path in paths:
+              content=(root/path).read_text()
+              sha=hashlib.sha256(content.encode()).hexdigest()
+              hashes[path]=sha
+              print("ARM_FORMATTED_FILE="+json.dumps({"path":path,"content":content,"sha256":sha}))
+          print("ARM_VALIDATED_IDENTITY="+json.dumps({"candidate":"3c383fee4dd2f78b3e5a448d35e0cf6eb1c08afb","files":hashes,"lock_sha256":hashlib.sha256((root/"Cargo.lock").read_bytes()).hexdigest(),"format_changed":sorted(changed)}))
+          PY

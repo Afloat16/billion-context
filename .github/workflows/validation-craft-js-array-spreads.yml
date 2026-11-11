@@ -23,7 +23,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: Afloat16/craft-anything
-          ref: 5e62cf4eb0d4183149130573ab26c15306eb5b3a
+          ref: 42098250e9fbbc3f5576bc286ca0e87d966968fe
           fetch-depth: 0
           persist-credentials: false
       - name: Verify only the validation status changed

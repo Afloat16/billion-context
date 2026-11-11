@@ -1,0 +1,53 @@
+name: Claude sync-hub baseline comparison
+on:
+  push:
+    branches:
+      - validation/claude-sync-regressions-20261111
+permissions:
+  contents: read
+jobs:
+  sync-hub:
+    name: sync-hub on ${{ matrix.label }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: main-6b779c0
+            ref: 6b779c06796138aeb4b0ee2fa7dbd25912e4f7fb
+          - label: telemetry-a9f5550
+            ref: a9f5550fbc660ad105444b17e479e1a03e4eb437
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: Afloat16/claude-mem
+          ref: ${{ matrix.ref }}
+          persist-credentials: false
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - name: Install the locked sync-hub dependencies
+        working-directory: services/sync-hub
+        run: bun install --frozen-lockfile
+      - name: Run the unchanged main suite
+        working-directory: services/sync-hub
+        run: bun run test
+      - name: Repeat the unchanged WebSocket acceptance suite
+        working-directory: services/sync-hub
+        shell: bash
+        run: |
+          failures=0
+          for attempt in 1 2 3 4 5; do
+            echo "::group::WebSocket acceptance attempt $attempt"
+            if bun run test:ws; then
+              echo "attempt $attempt passed"
+            else
+              failures=$((failures + 1))
+              echo "attempt $attempt failed"
+            fi
+            echo "::endgroup::"
+          done
+          echo "WebSocket suites failed: $failures / 5"
+          test "$failures" -eq 0

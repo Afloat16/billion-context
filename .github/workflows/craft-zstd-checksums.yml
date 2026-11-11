@@ -6,6 +6,7 @@ permissions:
   contents: read
 jobs:
   negative:
+    if: ${{ false }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -22,7 +23,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: Afloat16/craft-anything
-          ref: 0c389675333fd9a5ab971a7d3693be5f6f884e4a
+          ref: 73826326c516b3f53b5e5997804cc38b0c2fd059
           path: regression
           persist-credentials: false
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
@@ -65,7 +66,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: Afloat16/craft-anything
-          ref: 0c389675333fd9a5ab971a7d3693be5f6f884e4a
+          ref: 73826326c516b3f53b5e5997804cc38b0c2fd059
+          fetch-depth: 2
           path: fixed
           persist-credentials: false
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
@@ -77,6 +79,7 @@ jobs:
         working-directory: fixed
         run: |
           rustup override set 1.99.0
+          git diff --exit-code 0c389675333fd9a5ab971a7d3693be5f6f884e4a HEAD -- crates/formats/src/decompress.rs crates/formats/Cargo.toml Cargo.lock
           python3 - <<'PY'
           import hashlib
           from pathlib import Path

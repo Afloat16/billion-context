@@ -12,8 +12,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: Afloat16/claude-mem
-          ref: 762186be9969e7028001c401015d0f291f8ee553
-          fetch-depth: 2
+          ref: f1a10af30ddbfc93135bb036705bbad25ffcf635
+          fetch-depth: 3
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
@@ -33,33 +33,6 @@ jobs:
         run: node scripts/build-hooks.js
       - name: Check patch and test lane ownership
         run: |
+          git diff --exit-code 762186be9969e7028001c401015d0f291f8ee553 HEAD -- src tests/worker/http/routes/advisor-project-filter.test.ts
           git diff --check 308a9ab4a141ac49ca0e72bbccc0c9cdf3770ca0 HEAD
           bun scripts/test-lanes.ts check
-  baseline:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          repository: Afloat16/claude-mem
-          ref: 9b049d51fe458100fb6d37e03bed6c8c3e6d5f82
-          fetch-depth: 2
-          persist-credentials: false
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: 1.4.4
-      - name: Install repository dependencies
-        run: npm install --no-audit --no-fund
-      - name: Reproduce omitted calls on unchanged main
-        shell: bash
-        run: |
-          set +e
-          bun test tests/worker/http/routes/advisor-project-filter.test.ts --timeout 30000 2>&1 | tee /tmp/advisor-baseline.log
-          result=${PIPESTATUS[0]}
-          set -e
-          test "$result" -eq 1
-          grep -F '2 fail' /tmp/advisor-baseline.log
-          grep -F '2 pass' /tmp/advisor-baseline.log

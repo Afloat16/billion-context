@@ -58,41 +58,54 @@ def transformed(original, count):
     assert blob.startswith(b"\xff Go buildinf:") and blob[15] & 2
     phoff, phsize, phnum = u64(original, 32), u16(original, 54), u16(original, 56)
     assert phsize == 56
-    extra_header = phoff + phsize * phnum
-    first_section_data = min(row["offset"] for row in rows.values() if row["size"] and row["offset"] >= extra_header)
-    assert extra_header + phsize <= first_section_data
-    assert original[extra_header:extra_header + phsize] == bytes(phsize), "do not overwrite existing data"
-    loads = [phoff + index * phsize for index in range(phnum) if u32(original, phoff + index * phsize) == 1]
-    address = align(max(u64(original, at + 16) + u64(original, at + 40) for at in loads)) + 4096
+    headers = [bytearray(original[phoff + index * phsize:phoff + (index + 1) * phsize])
+               for index in range(phnum)]
+    load_indices = [index for index, header in enumerate(headers) if u32(header, 0) == 1]
+    address = align(max(u64(headers[index], 16) + u64(headers[index], 40)
+                        for index in load_indices)) + 4096
     broken = b"\xff Go buildinf:" + bytes([8, 0]) + bytes(16)
     assert len(broken) == 32
     payload = broken * count + blob
-    offset = align(len(original))
+    segment_offset = align(len(original))
+    header_bytes = (phnum + 1) * phsize
+    payload_start = align(header_bytes, 16)
+    payload_offset = segment_offset + payload_start
+    payload_address = address + payload_start
+    segment_size = payload_start + len(payload)
+    # Relocate the complete program-header table into the new mapping. A run of
+    # zero bytes after the old table may be the required null section header,
+    # not free padding; no original section or header table is overwritten.
+    for header in headers:
+        if u32(header, 0) == 6:  # PT_PHDR describes this relocated table.
+            struct.pack_into("<Q", header, 8, segment_offset)
+            struct.pack_into("<Q", header, 16, address)
+            struct.pack_into("<Q", header, 24, address)
+            struct.pack_into("<Q", header, 32, header_bytes)
+            struct.pack_into("<Q", header, 40, header_bytes)
+    # Keep LOAD records in virtual-address order and before empty trailing
+    # records, as in a normal linked image.
+    headers.insert(max(load_indices) + 1, struct.pack("<IIQQQQQQ", 1, 6, segment_offset,
+                   address, address, segment_size, segment_size, 4096))
     output = bytearray(original)
     output[info["offset"]:info["offset"] + 14] = bytes(14)
-    output.extend(bytes(offset - len(output)))
+    output.extend(bytes(segment_offset - len(output)))
+    output.extend(b"".join(headers))
+    output.extend(bytes(payload_offset - len(output)))
     output.extend(payload)
+    struct.pack_into("<Q", output, 32, segment_offset)
     struct.pack_into("<H", output, 56, phnum + 1)
-    headers = [bytearray(original[phoff + index * phsize:phoff + (index + 1) * phsize])
-               for index in range(phnum)]
-    for header in headers:
-        if u32(header, 0) == 6:  # PT_PHDR spans the additional load record too.
-            struct.pack_into("<Q", header, 32, (phnum + 1) * phsize)
-            struct.pack_into("<Q", header, 40, (phnum + 1) * phsize)
-    # Keep load records in ascending virtual-address order and before the trailing
-    # zero-sized GNU_STACK record; Go 1.24's DataReader examines every program
-    # header, including that empty record, before selecting a later load.
-    insert_at = max(index for index, header in enumerate(headers) if u32(header, 0) == 1) + 1
-    headers.insert(insert_at, struct.pack("<IIQQQQQQ", 1, 6, offset, address, address,
-                                         len(payload), len(payload), 4096))
-    output[phoff:phoff + (phnum + 1) * phsize] = b"".join(headers)
-    struct.pack_into("<Q", output, info["at"] + 16, address)
-    struct.pack_into("<Q", output, info["at"] + 24, offset)
+    struct.pack_into("<Q", output, info["at"] + 16, payload_address)
+    struct.pack_into("<Q", output, info["at"] + 24, payload_offset)
     struct.pack_into("<Q", output, info["at"] + 32, len(payload))
-    assert output[offset + count * 32:offset + len(payload)] == blob
-    return bytes(output), dict(candidate_probes=count, metadata_offset=offset + count * 32,
-                               metadata_address=address + count * 32,
-                               metadata_sha256=hashlib.sha256(blob).hexdigest(), payload_bytes=len(payload))
+    assert output[payload_offset + count * 32:payload_offset + len(payload)] == blob
+    assert sections(output)[".go.buildinfo"]["offset"] == payload_offset
+    for name, row in rows.items():
+        if name != ".go.buildinfo":
+            assert sections(output)[name] == row, ("changed section", name)
+    return bytes(output), dict(candidate_probes=count, metadata_offset=payload_offset + count * 32,
+                               metadata_address=payload_address + count * 32,
+                               metadata_sha256=hashlib.sha256(blob).hexdigest(), payload_bytes=len(payload),
+                               relocated_phdr_offset=segment_offset, original_phdr_offset=phoff)
 
 def symbols(path, env):
     text = subprocess.check_output(["go", "tool", "nm", str(path)], text=True, env=env)

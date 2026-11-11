@@ -1,4 +1,4 @@
-name: MCP event-stream framing full validation
+name: MCP SSE final-document validation
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
 jobs:
   mcp-sse:
     runs-on: ubuntu-24.04
-    timeout-minutes: 75
+    timeout-minutes: 60
     env:
       CARGO_INCREMENTAL: "0"
       CARGO_BUILD_JOBS: "2"
@@ -23,183 +23,31 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: Afloat16/craft-anything
-          ref: a9578446dac0fde1cd95d871c2a187f0cbea506a
+          ref: c6750d8e0605bd3e70ebc9c4a75fba1c14632541
           fetch-depth: 0
           persist-credentials: false
-      - name: Check native EventSource availability
-        run: node --experimental-eventsource -p 'typeof EventSource'
       - name: Install Rust
         run: |
-          rustup toolchain install 1.99.0 --profile minimal --component rustfmt --component clippy --target wasm32-unknown-unknown
+          rustup toolchain install 1.99.0 --profile minimal --component rustfmt
           rustup default 1.99.0
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
         with:
           key: craft-mcp-sse-framing-full-v2
           save-if: true
           cache-on-failure: true
-      - name: Check formatting
-        run: cargo fmt --all -- --check
-      - name: Reproduce the original public-client framing failures
+      - name: Verify unchanged implementation, tests and dependencies
         run: |
           python3 - <<'PY'
-          import pathlib
           import subprocess
-          path = pathlib.Path("crates/engines/src/mcp_client.rs")
-          fixed = path.read_bytes()
-          failures = {
-              "carriage_return_delimits_notifications_and_the_answer",
-              "carriage_return_comments_do_not_hide_the_answer",
-              "a_single_initial_bom_is_removed_for_every_line_ending",
-              "mixed_line_endings_join_multiline_json_data",
-              "a_complete_carriage_return_event_returns_before_the_stream_closes",
-          }
-          try:
-              path.write_bytes(subprocess.check_output(["git", "show", "041a9bed1f3041647036ea36ef3e67a6e0cd12a5:" + path.as_posix()]))
-              result = subprocess.run(
-                  ["cargo", "--config", 'profile.dev.package."*".opt-level=0', "test", "--locked",
-                   "-p", "craft-anything-engines", "--test", "mcp_sse_framing", "--", "--nocapture"],
-                  text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-              )
-              print(result.stdout, end="")
-              if result.returncode == 0 or "test result: FAILED. 5 passed; 5 failed;" not in result.stdout:
-                  raise SystemExit("Expected five framing failures and five controls on the unchanged client")
-              listed = result.stdout.rsplit("failures:", 1)[-1].split("test result:", 1)[0]
-              actual = {line.strip() for line in listed.splitlines() if line.strip()}
-              assert actual == failures, actual
-          finally:
-              path.write_bytes(fixed)
+          base = "a9578446dac0fde1cd95d871c2a187f0cbea506a"
+          changed = set(subprocess.check_output(["git", "diff", "--name-only", base, "HEAD"], text=True).splitlines())
+          assert changed == {"docs/ROADMAP.md", "docs/STATUS.md"}, changed
+          subprocess.run(["git", "diff", "--exit-code", base, "HEAD", "--", ".", ":(exclude)docs/ROADMAP.md", ":(exclude)docs/STATUS.md"], check=True)
+          print("All implementation, test and dependency files are identical to the fully validated source.")
           PY
-      - name: Run the complete external-engine suite
-        run: cargo --config 'profile.dev.package."*".opt-level=0' test --locked -p craft-anything-engines
-      - name: Compare fixed MCP replies with native EventSource
-        run: |
-          mkdir -p crates/engines/examples
-          trap 'rm -f crates/engines/examples/validation_mcp_sse.rs' EXIT
-          cat > crates/engines/examples/validation_mcp_sse.rs <<'RS'
-          use craft_anything_engines::mcp_client::{McpClient, Server, ServerUrl};
-          use serde_json::json;
-          use std::collections::BTreeMap;
-          use std::time::Duration;
-          
-          fn main() {
-              let url = std::env::args().nth(1).expect("loopback URL");
-              let result = McpClient::connect(
-                  "fixture",
-                  &Server::Url(ServerUrl { url, headers: BTreeMap::new() }),
-                  Duration::from_secs(5),
-              )
-              .and_then(|mut client| client.list_tools(Duration::from_secs(5)));
-              match result {
-                  Ok(tools) => println!("{}", json!({"ok": true, "tools": tools})),
-                  Err(error) => println!("{}", json!({"ok": false, "code": error.code, "message": error.message})),
-              }
-          }
-          RS
-          cargo --config 'profile.dev.package."*".opt-level=0' build --locked -p craft-anything-engines --example validation_mcp_sse
-          cat > /tmp/validation_mcp_sse.mjs <<'JS'
-          import assert from "node:assert/strict";
-          import http from "node:http";
-          import { spawn } from "node:child_process";
-          import { once } from "node:events";
-          
-          assert.equal(typeof EventSource, "function");
-          const answer = JSON.stringify({jsonrpc:"2.0", id:2, result:{tools:[{name:"echo_你好", inputSchema:{type:"object"}}]}});
-          const notice = JSON.stringify({jsonrpc:"2.0", method:"notifications/progress", params:{progress:1}});
-          const event = (value, ending) => "data: " + value + ending + ending;
-          const tests = [
-            {name:"lf", text:event(answer,"\n"), old:true, expected:true},
-            {name:"crlf", text:event(answer,"\r\n"), old:true, expected:true},
-            {name:"lf_notification_then_reply", text:event(notice,"\n")+event(answer,"\n"), old:true, expected:true},
-            {name:"cr_notification_then_reply", text:event(notice,"\r")+event(answer,"\r"), old:false, expected:true},
-            {name:"cr_comment_then_reply", text:": keepalive\r"+event(answer,"\r"), old:false, expected:true},
-            {name:"leading_bom_lf", text:"\uFEFF"+event(answer,"\n"), old:false, expected:true},
-            {name:"leading_bom_crlf", text:"\uFEFF"+event(answer,"\r\n"), old:false, expected:true},
-            {name:"leading_bom_cr", text:"\uFEFF"+event(answer,"\r"), old:false, expected:true},
-            {name:"mixed_line_endings", text:'data: {"jsonrpc":\rdata: "2.0",\ndata: "id":2,\r\ndata: "result":{"tools":[{"name":"echo_你好","inputSchema":{"type":"object"}}]}}\r\r', old:false, expected:true},
-            {name:"multiline_lf", text:'data: {"jsonrpc":\ndata: "2.0",\ndata: "id":2,\ndata: "result":{"tools":[{"name":"echo_你好","inputSchema":{"type":"object"}}]}}\n\n', old:true, expected:true},
-            {name:"comments_and_unknown_fields", text:": comment\nretry: 20\nid: server-event\nevent: message\n"+event(answer,"\n"), old:true, expected:true},
-            {name:"wrong_id_then_reply", text:event(answer.replace('"id":2','"id":99'),"\n")+event(answer,"\n"), old:true, expected:true},
-            {name:"bom_after_stream_start_is_not_stripped", text:"\n\uFEFF"+event(answer,"\n"), old:false, expected:false},
-            {name:"only_one_bom_is_stripped", text:"\uFEFF\uFEFF"+event(answer,"\n"), old:false, expected:false},
-            {name:"wrong_id_without_reply", text:event(answer.replace('"id":2','"id":99'),"\n"), old:false, expected:false},
-          ];
-          const server = http.createServer(async (req,res)=>{
-            const [index,mode] = req.url.slice(1).split("/");
-            const test = tests[Number(index)];
-            assert.ok(test, req.url);
-            if(mode==="events"){
-              res.writeHead(200, {"Content-Type":"text/event-stream", "Connection":"close"});
-              res.end(test.text);
-              return;
-            }
-            let body = "";
-            for await (const part of req) body += part;
-            const request = JSON.parse(body);
-            if(request.method==="initialize"){
-              const value=JSON.stringify({jsonrpc:"2.0",id:request.id,result:{protocolVersion:"2025-06-18",capabilities:{}}});
-              res.writeHead(200, {"Content-Type":"application/json","Content-Length":Buffer.byteLength(value),"Connection":"close"});
-              res.end(value);
-            }else if(request.method==="notifications/initialized"){
-              res.writeHead(202, {"Content-Length":"0","Connection":"close"}); res.end();
-            }else{
-              assert.equal(request.method,"tools/list");
-              res.writeHead(200, {"Content-Type":"text/event-stream","Content-Length":Buffer.byteLength(test.text),"Connection":"close"});
-              res.end(test.text);
-            }
-          });
-          server.listen(0,"127.0.0.1");
-          await once(server,"listening");
-          const base="http://127.0.0.1:"+server.address().port;
-          function reference(index){
-            return new Promise((resolve,reject)=>{
-              const source=new EventSource(base+"/"+index+"/events");
-              const timer=setTimeout(()=>{source.close();reject(new Error("EventSource timeout "+index));},3000);
-              function finish(value){clearTimeout(timer);source.close();resolve(value);}
-              source.onmessage=(ev)=>{const msg=JSON.parse(ev.data);if(msg.id===2)finish(msg.result.tools);};
-              source.onerror=()=>finish(null);
-            });
-          }
-          function production(index){
-            return new Promise((resolve,reject)=>{
-              const child=spawn("target/debug/examples/validation_mcp_sse",[base+"/"+index+"/mcp"],{stdio:["ignore","pipe","pipe"]});
-              let out="",err="";
-              child.stdout.on("data",b=>out+=b);
-              child.stderr.on("data",b=>err+=b);
-              child.on("error",reject);
-              child.on("close",code=>{if(code!==0)reject(new Error(err||"child exited "+code));else resolve(JSON.parse(out));});
-            });
-          }
-          const outcomes=[];
-          try{
-            for(let i=0;i<tests.length;i++){
-              const test=tests[i];
-              const ref=await reference(i);
-              assert.equal(ref!==null,test.expected,test.name+" reference");
-              const actual=await production(i);
-              const expected=process.env.EXPECT_FIXED==="1"?test.expected:test.old;
-              assert.equal(actual.ok,expected,test.name+" production "+JSON.stringify(actual));
-              if(actual.ok)assert.deepEqual(actual.tools,ref.map(t=>({name:t.name,inputSchema:t.inputSchema,title:t.title??null,description:t.description??null,annotations:t.annotations??null})),test.name+" exact tools");
-              outcomes.push({name:test.name,reference:ref!==null,production:actual.ok,match:actual.ok===(ref!==null)});
-            }
-          }finally{
-            server.close();server.closeAllConnections();
-          }
-          console.log("MCP SSE / Node "+process.version+": "+JSON.stringify(outcomes));
-          console.log("MCP SSE cases="+outcomes.length+" mismatches="+outcomes.filter(r=>!r.match).length);
-          JS
-          EXPECT_FIXED=1 node --experimental-eventsource /tmp/validation_mcp_sse.mjs
-          git diff --exit-code
-      - name: Run strict all-target Clippy
-        run: cargo --config 'profile.dev.package."*".opt-level=0' clippy --locked -p craft-anything-engines --all-targets -- -D warnings
-      - name: Check repository contracts
-        run: |
-          cargo --config 'profile.dev.package."*".opt-level=0' xtask layers
-          cargo --config 'profile.dev.package."*".opt-level=0' xtask locks
-          cargo --config 'profile.dev.package."*".opt-level=0' xtask secrets
-      - name: Check all WebAssembly layers
-        run: cargo --config 'profile.dev.package."*".opt-level=0' xtask wasm
-      - name: Require formatting and an unchanged source tree
+      - name: Validate final documents
         run: |
           cargo fmt --all -- --check
-          git diff --check
+          cargo --config 'profile.dev.package."*".opt-level=0' xtask secrets
+          git diff --check a9578446dac0fde1cd95d871c2a187f0cbea506a HEAD
           git diff --exit-code

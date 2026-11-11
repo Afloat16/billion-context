@@ -1,4 +1,4 @@
-name: Claude compressed Codex history fix
+name: Claude compressed Codex final comparison
 on:
   push:
     branches: [validation/claude-codex-compressed-fix-20261111]
@@ -12,8 +12,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: Afloat16/claude-mem
-          ref: 8f30443273f3f7d1b211abd77ea1393540b45bbb
-          fetch-depth: 3
+          ref: b3fbdb4033a702671b00ea5a0d45c26a7e8ca58e
+          fetch-depth: 4
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
@@ -33,3 +33,32 @@ jobs:
         run: node scripts/build-hooks.js
       - name: Check patch whitespace
         run: git diff --check 308a9ab4a141ac49ca0e72bbccc0c9cdf3770ca0 HEAD
+
+  baseline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: Afloat16/claude-mem
+          ref: 590fbc8ffe1d4b4b29ae6192c2bfc8a9f7978982
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - name: Install repository dependencies
+        run: npm install --no-audit --no-fund
+      - name: Demonstrate failures against unchanged main
+        shell: bash
+        run: |
+          set +e
+          bun test tests/services/prompt-import/codex-compressed-history.test.ts --timeout 30000 2>&1 | tee /tmp/codex-compressed-baseline.log
+          result=${PIPESTATUS[0]}
+          set -e
+          test "$result" -eq 1
+          grep -F '8 fail' /tmp/codex-compressed-baseline.log
+          grep -F '3 pass' /tmp/codex-compressed-baseline.log

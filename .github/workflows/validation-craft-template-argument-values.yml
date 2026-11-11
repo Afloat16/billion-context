@@ -1,0 +1,202 @@
+name: JavaScript template-argument native baseline
+
+on:
+  push:
+    branches: [validation/craft-template-argument-values-20261111]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  template-values:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      CARGO_INCREMENTAL: "0"
+      CARGO_BUILD_JOBS: "2"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+      CARGO_PROFILE_DEV_OPT_LEVEL: "0"
+      CARGO_TERM_COLOR: never
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: Afloat16/craft-anything
+          ref: 3ce1ce9f52077a53811be8a0309fdbe85b16b417
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install Rust
+        run: |
+          rustup toolchain install 1.99.0 --profile minimal
+          rustup default 1.99.0
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
+        with:
+          key: craft-template-argument-values-native-v1
+          save-if: true
+          cache-on-failure: true
+      - name: Compare extracted identities with actual Node values
+        run: |
+          node --version
+          mkdir -p crates/js/examples
+          trap 'rm -f crates/js/examples/validation_template_arguments.rs' EXIT
+          cat > crates/js/examples/validation_template_arguments.rs <<'RS'
+          use craft_anything_js::{Limits, analyze};
+          use serde_json::json;
+          use std::io::Read;
+          
+          fn main() {
+              let mut source = String::new();
+              std::io::stdin().read_to_string(&mut source).unwrap();
+              let facts = analyze("fixture.cjs", &source, &Limits::default()).facts;
+              assert_eq!(facts.parse_errors, 0);
+              println!("{}", json!({
+                  "imports":facts.imports.iter().map(|item| item.specifier.clone()).collect::<Vec<_>>(),
+                  "ipc":facts.ipc.iter().map(|item| item.channel.clone()).collect::<Vec<_>>(),
+                  "exposed":facts.exposed.iter().map(|item| item.key.clone()).collect::<Vec<_>>(),
+                  "exports":facts.exports.cjs,
+                  "native":facts.native_modules,
+                  "routes":facts.routes.iter().filter(|item| item.source == "protocol").map(|item| item.path.clone()).collect::<Vec<_>>(),
+              }));
+          }
+          RS
+          cargo --config 'profile.dev.package."*".opt-level=0' build --locked -p craft-anything-js --example validation_template_arguments
+          cat > /tmp/validation_template_arguments.js <<'JS'
+          const assert = require("node:assert/strict");
+          const cp = require("node:child_process");
+          const vm = require("node:vm");
+          const CASES = [
+            [
+              "require_unicode",
+              "require(`./mod\\u0075le.js`);",
+              true
+            ],
+            [
+              "require_hex",
+              "require(`./m\\x6fdule.js`);",
+              true
+            ],
+            [
+              "require_backslash",
+              "require(`./path\\\\name.js`);",
+              true
+            ],
+            [
+              "require_continuation",
+              "require(`./mo\\\ndule.js`);",
+              true
+            ],
+            [
+              "require_newline",
+              "require(`./a\\nb.js`);",
+              true
+            ],
+            [
+              "native_suffix",
+              "require(`./addon.n\\x6fde`);",
+              true
+            ],
+            [
+              "ipc_unicode",
+              "ipcMain.handle(`a\\u0070p:load`, () => {}); ipcRenderer.invoke('app:load');",
+              true
+            ],
+            [
+              "ipc_tab",
+              "ipcRenderer.send(`line\\tcolumn`);",
+              true
+            ],
+            [
+              "ipc_escaped_dollar",
+              "ipcRenderer.send(`\\${literal}`);",
+              true
+            ],
+            [
+              "exposed_key",
+              "contextBridge.exposeInMainWorld(`a\\x70i`, { ping() {} });",
+              true
+            ],
+            [
+              "protocol_scheme",
+              "protocol.handle(`a\\u0070p`, () => {});",
+              true
+            ],
+            [
+              "cjs_export",
+              "Object.defineProperty(exports, `v\\u0061lue`, {value:1});",
+              true
+            ],
+            [
+              "native_binding",
+              "require('bindings')(`n\\u0061tive`);",
+              true
+            ],
+            [
+              "empty_template",
+              "ipcRenderer.send(``);",
+              false
+            ],
+            [
+              "ordinary_template",
+              "ipcMain.handle(`app:load`,()=>{}); require(`./plain.js`);",
+              false
+            ],
+            [
+              "escaped_string",
+              "ipcRenderer.send('a\\u0070p:load'); require('./mod\\u0075le.js');",
+              false
+            ],
+            [
+              "static_interpolation",
+              "ipcRenderer.send(`a\\u0070p:${'load'}`);",
+              false
+            ],
+            [
+              "constant_alias",
+              "const channel = `a\\u0070p:load`; ipcRenderer.send(channel);",
+              false
+            ]
+          ];
+          
+          function runtime(source) {
+            const observed = { imports: [], ipc: [], exposed: [], exports: [], native: [], routes: [] };
+            const exports = {};
+            const ipc = {
+              handle(channel) { observed.ipc.push(channel); },
+              send(channel) { observed.ipc.push(channel); },
+              invoke(channel) { observed.ipc.push(channel); },
+            };
+            const contextBridge = { exposeInMainWorld(key) { observed.exposed.push(key); } };
+            const protocol = { handle(scheme) { observed.routes.push(scheme + "://"); } };
+            const requireFixture = (specifier) => {
+              observed.imports.push(specifier);
+              if (specifier.endsWith(".node")) observed.native.push(specifier);
+              if (specifier === "bindings") return name => observed.native.push("bindings:" + name);
+              return {};
+            };
+            vm.runInNewContext(source, { require:requireFixture, ipcMain:ipc, ipcRenderer:ipc, contextBridge, protocol, exports }, {timeout:1000});
+            observed.exports = Object.getOwnPropertyNames(exports).filter(name => name !== "__esModule");
+            return observed;
+          }
+          let mismatches = 0;
+          for (const [name, source, expectedMismatch] of CASES) {
+            const expected = runtime(source);
+            const run = cp.spawnSync("target/debug/examples/validation_template_arguments", [], {input:source, encoding:"utf8"});
+            assert.equal(run.status, 0, run.stderr);
+            const actual = JSON.parse(run.stdout);
+            const equal = JSON.stringify(actual) === JSON.stringify(Object.fromEntries(Object.entries(expected).sort(([a],[b])=>a.localeCompare(b))));
+            if (process.env.EXPECT_FIXED) {
+              assert.deepEqual(actual, expected, name);
+            } else if (expectedMismatch) {
+              assert.notDeepEqual(actual, expected, name);
+            } else {
+              assert.deepEqual(actual, expected, name);
+            }
+            if (!equal) mismatches++;
+            console.log(JSON.stringify({name, equal, expected, actual}));
+          }
+          console.log(JSON.stringify({node:process.version, cases:CASES.length, mismatches, controls:CASES.filter(x=>!x[2]).length}));
+          JS
+          node /tmp/validation_template_arguments.js
+      - name: Require an unchanged source tree
+        run: test -z "$(git status --porcelain)"

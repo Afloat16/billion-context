@@ -1,4 +1,4 @@
-name: Frida process-column full validation
+name: Frida process-table column final-document validation
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
 jobs:
   frida-columns:
     runs-on: ubuntu-24.04
-    timeout-minutes: 75
+    timeout-minutes: 60
     env:
       CARGO_INCREMENTAL: "0"
       CARGO_BUILD_JOBS: "2"
@@ -23,221 +23,31 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: Afloat16/craft-anything
-          ref: 748535426bd6265d1fa2ccae2476de734e52f642
+          ref: c6053042f262d76a2221a32e9d4c3339667539ca
           fetch-depth: 0
           persist-credentials: false
       - name: Install Rust
         run: |
-          rustup toolchain install 1.99.0 --profile minimal --component rustfmt --component clippy --target wasm32-unknown-unknown
+          rustup toolchain install 1.99.0 --profile minimal --component rustfmt
           rustup default 1.99.0
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
         with:
           key: craft-frida-process-columns-full-v2
           save-if: true
           cache-on-failure: true
-      - name: Check formatting
-        run: cargo fmt --all -- --check
-      - name: Reproduce original public-parser column errors
+      - name: Verify unchanged implementation, tests and dependencies
         run: |
           python3 - <<'PY'
-          import pathlib
           import subprocess
-          path = pathlib.Path("crates/engines/src/frida.rs")
-          fixed = path.read_bytes()
-          failures = {
-              "process_names_keep_dotted_suffixes_without_identifiers",
-              "process_names_keep_repeated_spaces_and_tabs",
-              "application_identifiers_come_from_the_header_even_without_dots",
-              "a_short_application_row_does_not_invent_an_identifier",
-              "a_later_process_header_clears_the_application_column",
-              "headerless_rows_keep_names_without_guessing_application_identifiers",
-              "separator_widths_handle_headers_wider_than_their_data_columns",
-          }
-          try:
-              path.write_bytes(subprocess.check_output(["git", "show", "3ce1ce9f52077a53811be8a0309fdbe85b16b417:" + path.as_posix()]))
-              result = subprocess.run(
-                  ["cargo", "--config", 'profile.dev.package."*".opt-level=0', "test", "--locked",
-                   "-p", "craft-anything-engines", "--test", "frida_process_columns", "--", "--nocapture"],
-                  text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-              )
-              print(result.stdout, end="")
-              if result.returncode == 0 or "test result: FAILED. 4 passed; 7 failed;" not in result.stdout:
-                  raise SystemExit("Expected seven process-table regressions and four controls on the unchanged parser")
-              listed = result.stdout.rsplit("failures:", 1)[-1].split("test result:", 1)[0]
-              actual = {line.strip() for line in listed.splitlines() if line.strip()}
-              assert actual == failures, actual
-          finally:
-              path.write_bytes(fixed)
+          base = "748535426bd6265d1fa2ccae2476de734e52f642"
+          changed = set(subprocess.check_output(["git", "diff", "--name-only", base, "HEAD"], text=True).splitlines())
+          assert changed == {"docs/ROADMAP.md", "docs/STATUS.md"}, changed
+          subprocess.run(["git", "diff", "--exit-code", base, "HEAD", "--", ".", ":(exclude)docs/ROADMAP.md", ":(exclude)docs/STATUS.md"], check=True)
+          print("All implementation, test and dependency files are identical to the fully validated source.")
           PY
-      - name: Run the complete external-engine suite
-        run: cargo --config 'profile.dev.package."*".opt-level=0' test --locked -p craft-anything-engines
-      - name: Install fixed native Frida tools
-        run: |
-          python3 -m venv "$RUNNER_TEMP/frida-oracle"
-          "$RUNNER_TEMP/frida-oracle/bin/python" -m pip install frida-tools==14.13.1 frida==17.26.2
-      - name: Compare live processes and native application-table formatting
-        run: |
-          mkdir -p crates/engines/examples
-          trap 'rm -f crates/engines/examples/validation_frida_columns.rs' EXIT
-          cat > crates/engines/examples/validation_frida_columns.rs <<'RS'
-          use craft_anything_engines::frida::{Frida, Selector, parse_processes};
-          use std::collections::BTreeSet;
-          use std::io::Read;
-          
-          fn main() {
-              let mut args = std::env::args().skip(1);
-              let mode = args.next().unwrap();
-              let cli = args.next().unwrap();
-              let wanted: BTreeSet<u32> = args.next().unwrap().split(',').map(|n| n.parse().unwrap()).collect();
-              let mut processes = if mode == "adapter" {
-                  Frida::new(cli).list_processes(&Selector { device_id: Some("local".into()), remote: None }).unwrap()
-              } else {
-                  let mut text = String::new();
-                  std::io::stdin().read_to_string(&mut text).unwrap();
-                  parse_processes(&text)
-              };
-              processes.retain(|p| wanted.contains(&p.pid));
-              processes.sort_by_key(|p| p.pid);
-              println!("{}", serde_json::to_string(&processes).unwrap());
-          }
-          RS
-          cargo --config 'profile.dev.package."*".opt-level=0' build --locked -p craft-anything-engines --example validation_frida_columns
-          cat > /tmp/validation_frida_app_table.py <<'PY'
-          import json
-          import sys
-          from types import SimpleNamespace
-          from frida_tools import ps
-          from frida_tools.application import ConsoleApplication
-          
-          fixtures = json.loads(sys.argv[1])
-          
-          class DeviceFixture:
-              def enumerate_applications(self, **kwargs):
-                  return [SimpleNamespace(pid=pid, name=name, identifier=identifier, parameters={})
-                          for pid, name, identifier in fixtures]
-          
-          def run_fixture(self):
-              self._device = DeviceFixture()
-              self._start()
-              assert self._exit_status == 0, self._exit_status
-          
-          ConsoleApplication.run = run_fixture
-          sys.argv = ["frida-ps", "-D", "local", "-ai"]
-          ps.main()
-          PY
-          cat > /tmp/validation_frida_columns.py <<'PY'
-          import importlib.metadata
-          import json
-          import os
-          import pathlib
-          import shutil
-          import subprocess
-          import sys
-          import tempfile
-          import time
-          
-          import frida
-          
-          CASES = ["craft app.exe", "two  spaces", "café app.exe", "worker.main", "plain"]
-          with tempfile.TemporaryDirectory(prefix="craft-frida-columns-") as folder:
-              root = pathlib.Path(folder)
-              children = []
-              try:
-                  for name in CASES:
-                      program = root / name
-                      shutil.copy2("/bin/sleep", program)
-                      children.append(subprocess.Popen([str(program), "60"], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE))
-                  wanted = {p.pid: name for p, name in zip(children, CASES)}
-                  device = frida.get_local_device()
-                  deadline = time.monotonic() + 5
-                  while True:
-                      native = {p.pid: p.name for p in device.enumerate_processes() if p.pid in wanted}
-                      if native == wanted:
-                          break
-                      assert time.monotonic() < deadline, (native, wanted)
-                      time.sleep(0.02)
-                  binary_dir = pathlib.Path(sys.executable).parent
-                  environment = {**os.environ, "NO_COLOR": "1", "TERM": "dumb"}
-                  table = subprocess.check_output([str(binary_dir / "frida-ps"), "-D", "local"], text=True, env=environment)
-                  cli = str(binary_dir / "frida")
-                  pid_arg = ",".join(str(pid) for pid in wanted)
-                  rows = []
-                  for mode in ("parse", "adapter"):
-                      product = json.loads(subprocess.check_output(
-                          ["target/debug/examples/validation_frida_columns", mode, cli, pid_arg],
-                          text=True, input=table if mode == "parse" else "", env=environment,
-                      ))
-                      actual = {p["pid"]: p for p in product}
-                      assert set(actual) == set(wanted), (mode, actual, wanted)
-                      mismatches = []
-                      for pid, name in wanted.items():
-                          item = actual[pid]
-                          equal = item["name"] == name and item.get("identifier") is None
-                          if not equal:
-                              mismatches.append(name)
-                          rows.append({"path": mode, "native_name": name, "product": item, "equal": equal})
-                      expected = [] if os.getenv("EXPECT_FIXED") else CASES[:3]
-                      assert mismatches == expected, (mode, mismatches, expected)
-                  for row in rows:
-                      print(json.dumps(row, ensure_ascii=False), flush=True)
-                  relevant_lines = [line for line in table.splitlines()
-                                    if line.split() and line.split()[0].isdigit() and int(line.split()[0]) in wanted]
-                  print(json.dumps({
-                      "frida": frida.__version__,
-                      "frida_tools": importlib.metadata.version("frida-tools"),
-                      "real_processes": len(wanted),
-                      "paths": 2,
-                      "mismatches": sum(not row["equal"] for row in rows),
-                      "table_rows": relevant_lines,
-                  }, ensure_ascii=False), flush=True)
-              finally:
-                  for child in children:
-                      child.terminate()
-                  for child in children:
-                      child.wait(timeout=5)
-          
-          APPLICATION_TABLES = [
-              ("ordinary", [(1234, "Example App", "com.example.app")]),
-              ("repeated_spaces", [(1234, "two  spaces", "com.example.one"), (1235, "plain", "com.example.two")]),
-              ("identifier_without_dot", [(1234, "Example App", "simple")]),
-              ("unicode", [(1234, "工具 Example", "org.example.one"), (1235, "🌍 café", "org.example.two")]),
-              ("narrow_columns", [(12, "A", "x")]),
-              ("one_digit_pid", [(1, "A", "org.example.one")]),
-              ("empty_identifier", [(12, "my app.exe", ""), (13, "plain", "org.example.two")]),
-              ("nonrunning_policy", [(0, "Not running", "org.example.idle"), (12, "plain", "org.example.running")]),
-          ]
-          application_results = []
-          for name, fixtures in APPLICATION_TABLES:
-              table = subprocess.check_output(
-                  [sys.executable, "/tmp/validation_frida_app_table.py", json.dumps(fixtures, ensure_ascii=False)],
-                  text=True, env={**os.environ, "NO_COLOR": "1", "TERM": "dumb"},
-              )
-              wanted = sorted([{"pid":pid, "name":label, **({"identifier":identifier} if identifier else {})}
-                               for pid, label, identifier in fixtures if pid], key=lambda item: item["pid"])
-              pids = ",".join(str(item["pid"]) for item in wanted)
-              actual = json.loads(subprocess.check_output(
-                  ["target/debug/examples/validation_frida_columns", "parse", "unused", pids],
-                  text=True, input=table,
-              ))
-              assert actual == wanted, (name, table, actual, wanted)
-              application_results.append({"name":name, "rows":len(wanted), "equal":True, "table":table})
-          for row in application_results:
-              print(json.dumps(row, ensure_ascii=False), flush=True)
-          print(json.dumps({"native_formatter_application_tables": len(application_results), "mismatches": 0}), flush=True)
-          PY
-          EXPECT_FIXED=1 "$RUNNER_TEMP/frida-oracle/bin/python" /tmp/validation_frida_columns.py
-          git diff --exit-code
-      - name: Run strict all-target Clippy
-        run: cargo --config 'profile.dev.package."*".opt-level=0' clippy --locked -p craft-anything-engines --all-targets -- -D warnings
-      - name: Check repository contracts
-        run: |
-          cargo --config 'profile.dev.package."*".opt-level=0' xtask layers
-          cargo --config 'profile.dev.package."*".opt-level=0' xtask locks
-          cargo --config 'profile.dev.package."*".opt-level=0' xtask secrets
-      - name: Check all WebAssembly layers
-        run: cargo --config 'profile.dev.package."*".opt-level=0' xtask wasm
-      - name: Require formatting and an unchanged source tree
+      - name: Validate final documents
         run: |
           cargo fmt --all -- --check
-          git diff --check
+          cargo --config 'profile.dev.package."*".opt-level=0' xtask secrets
+          git diff --check 748535426bd6265d1fa2ccae2476de734e52f642 HEAD
           git diff --exit-code

@@ -1,0 +1,27 @@
+name: Craft Go build information preparation
+on:
+  push:
+    branches: [validation/craft-go-buildinfo-diagnostics-20261111]
+permissions:
+  contents: read
+jobs:
+  formatting:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: Afloat16/craft-anything
+          ref: da3e2b157a5e0d9dfb98dafe2fe9646159719a4f
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Install CI formatting toolchain
+        run: |
+          rustup toolchain install 1.99.0 --profile minimal --component rustfmt
+          rustup default 1.99.0
+      - name: Review formatting delta and native compiler availability
+        run: |
+          cargo fmt --all
+          git diff --stat
+          git diff -- crates/formats/src/go.rs crates/formats/tests/go_buildinfo_diagnostics.rs
+          go version

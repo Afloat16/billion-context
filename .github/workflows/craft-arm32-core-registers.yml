@@ -1,0 +1,23 @@
+name: Produce ARM32 and Thumb core evidence with QEMU and GDB
+on:
+  push:
+    branches: ["validation/craft-arm32-core-registers-20261111"]
+permissions:
+  contents: read
+jobs:
+  native:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          path: validation
+          persist-credentials: false
+      - name: Install native core producers and independent debugger
+        run: |
+          sudo apt-get install -y --no-install-recommends qemu-user gdb-multiarch=15.1-1ubuntu1~24.04.1
+          gdb-multiarch -nx -q -batch -ex 'python import time; print("GDB_PYTHON_READY")'
+          clang --version
+          ld.lld --version
+      - name: Execute four owned ARM programs and read the resulting guest cores
+        run: python3 validation/.github/validation/arm_core_native.py

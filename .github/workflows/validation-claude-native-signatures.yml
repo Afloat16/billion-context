@@ -34,14 +34,14 @@ jobs:
       - name: Compile the boundary fixtures with actual language tools
         run: |
           node --check tests/services/smart-file-read/fixtures/signature-boundaries.mjs
-          node_modules/.bin/tsc --noEmit --target ES2022 --module esnext --moduleResolution bundler --skipLibCheck tests/services/smart-file-read/fixtures/signature-boundaries.ts
+          node_modules/.bin/tsc --ignoreConfig --noEmit --target ES2022 --module esnext --moduleResolution bundler --skipLibCheck tests/services/smart-file-read/fixtures/signature-boundaries.ts
           g++ -std=c++17 -Wall -Werror -fsyntax-only tests/services/smart-file-read/fixtures/signature-boundaries.cpp
           mkdir -p "$RUNNER_TEMP/signature-java"
           javac --release 17 -d "$RUNNER_TEMP/signature-java" tests/services/smart-file-read/fixtures/SignatureBoundaries.java
           go version
           go tool compile -o "$RUNNER_TEMP/signature-go.o" tests/services/smart-file-read/fixtures/signature-boundaries.go
           rustc --version
-          rustc --crate-type lib --edition=2021 tests/services/smart-file-read/fixtures/signature-boundaries.rs -o "$RUNNER_TEMP/signature-rust.rlib"
+          rustc --crate-name signature_boundaries --crate-type lib --edition=2021 tests/services/smart-file-read/fixtures/signature-boundaries.rs -o "$RUNNER_TEMP/signature-rust.rlib"
           php --version
           php -l tests/services/smart-file-read/fixtures/signature-boundaries.php
           kotlinc -version
@@ -53,6 +53,7 @@ jobs:
       - name: Reproduce truncated headers on unchanged main
         shell: bash
         run: |
+          git fetch --no-tags origin fb09d44807900c2f732a42fb8a1319cca03da3f9
           git checkout --detach fb09d44807900c2f732a42fb8a1319cca03da3f9
           set +e
           bun test tests/services/smart-file-read/native-signature-boundaries.test.ts --timeout 120000 2>&1 | tee "$RUNNER_TEMP/native-signature-baseline.log"

@@ -13,8 +13,8 @@ key=lambda p:(p["name"],p["version"],p.get("source",""))
 oldkeys={key(p) for p in old["package"]}
 newkeys={key(p) for p in new["package"]}
 removed=sorted(oldkeys-newkeys); added=sorted(newkeys-oldkeys)
-assert {p[0] for p in removed} <= {"bzip2-rs"}, removed
-assert {p[0] for p in added} <= {"bzip2","libbz2-rs-sys"}, added
+assert {p[0] for p in removed} == {"bzip2-rs", "tinyvec"}, removed
+assert {p[0] for p in added} == {"bzip2","libbz2-rs-sys"}, added
 metadata=json.loads(Path("bzip2-metadata.json").read_text())
 active={n["id"] for n in metadata["resolve"]["nodes"]}
 active_names={p["name"] for p in metadata["packages"] if p["id"] in active}

@@ -2269,7 +2269,10 @@ export function buildSessionCacheReport(session: Session): BiliCacheReport {
             else byLo.set(lo, [l.hitPct]);
         }
         for (const [lo, hits] of [...byLo.entries()].sort((x, y) => x[0] - y[0]).slice(0, 24)) {
-            sizeBuckets.push({ lo, hi: lo + SIZE_BUCKET_TOK, n: hits.length, hitMedian: median(hits) ?? 0, hitMin: Math.min(...hits) });
+            // A session's ledger is unbounded; spreading a large bucket into
+            // one call exceeds the runtime argument limit and breaks reports.
+            const hitMin = hits.reduce((minimum, hit) => Math.min(minimum, hit), Infinity);
+            sizeBuckets.push({ lo, hi: lo + SIZE_BUCKET_TOK, n: hits.length, hitMedian: median(hits) ?? 0, hitMin });
         }
     }
     const lowGaps: number[] = [];

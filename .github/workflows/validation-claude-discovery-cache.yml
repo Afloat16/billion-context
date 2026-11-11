@@ -12,8 +12,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: Afloat16/claude-mem
-          ref: 28ca4cafa441316af43754dfb1b93c1ac1199423
-          fetch-depth: 2
+          ref: 72ce4373dfa692d5ff107b0f748671db701e7ca8
+          fetch-depth: 3
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
@@ -42,8 +42,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: Afloat16/claude-mem
-          ref: d544965d72f04de5d10de94d52119bd39a16d8cc
-          fetch-depth: 2
+          ref: 632863171dee3331c7a9a0ee1106467d91c4af52
+          fetch-depth: 3
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:

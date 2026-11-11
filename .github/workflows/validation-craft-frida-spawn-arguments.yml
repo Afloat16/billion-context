@@ -1,0 +1,174 @@
+name: Frida spawn-argument baseline
+
+on:
+  push:
+    branches: [validation/craft-frida-spawn-arguments-20261111]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  frida-spawn:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      CARGO_INCREMENTAL: "0"
+      CARGO_BUILD_JOBS: "2"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+      CARGO_PROFILE_DEV_OPT_LEVEL: "0"
+      CARGO_TERM_COLOR: never
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: Afloat16/craft-anything
+          ref: 3ce1ce9f52077a53811be8a0309fdbe85b16b417
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install fixed native Frida tools
+        run: |
+          python3 -m venv "$RUNNER_TEMP/frida-oracle"
+          "$RUNNER_TEMP/frida-oracle/bin/python" -m pip install frida-tools==14.13.1 frida==17.26.2
+      - name: Install Rust
+        run: |
+          rustup toolchain install 1.99.0 --profile minimal
+          rustup default 1.99.0
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
+        with:
+          key: craft-frida-spawn-arguments-native-v1
+          save-if: true
+          cache-on-failure: true
+      - name: Compare spawned arguments with the native Frida API
+        run: |
+          mkdir -p crates/engines/examples
+          trap 'rm -f crates/engines/examples/validation_frida_argv.rs' EXIT
+          cat > crates/engines/examples/validation_frida_argv.rs <<'RS'
+          use craft_anything_engines::frida::{Attach, Frida, Selector};
+          use serde_json::json;
+          use std::path::PathBuf;
+          use std::time::Duration;
+          
+          fn main() {
+              let mut args = std::env::args().skip(1);
+              let cli = args.next().unwrap();
+              let program = PathBuf::from(args.next().unwrap());
+              let script = PathBuf::from(args.next().unwrap());
+              let argv: Vec<String> = serde_json::from_str(&args.next().unwrap()).unwrap();
+              let result = Frida::new(cli)
+                  .timeout(Duration::from_secs(10))
+                  .idle_timeout(Duration::from_secs(5))
+                  .run_script(&Selector { device_id: Some("local".into()), remote: None }, &Attach::Spawn { program, argv }, &script);
+              match result {
+                  Ok(output) => println!("{}", json!({
+                      "ok": true, "success": output.success, "code": output.code,
+                      "stdout": output.stdout_text().chars().take(300).collect::<String>(),
+                      "stderr": output.stderr_text().chars().take(300).collect::<String>(),
+                  })),
+                  Err(error) => println!("{}", json!({"ok":false, "code":error.code, "message":error.message})),
+              }
+          }
+          RS
+          cargo --config 'profile.dev.package."*".opt-level=0' build --locked -p craft-anything-engines --example validation_frida_argv
+          cat > /tmp/validation_frida_argv.c <<'C'
+          #include <stdio.h>
+          
+          int main(int argc, char **argv) {
+              if (argc < 2) return 2;
+              FILE *output = fopen(argv[1], "wb");
+              if (!output) return 3;
+              for (int i = 2; i < argc; i++) {
+                  for (const unsigned char *p = (const unsigned char *)argv[i]; *p; p++) {
+                      fprintf(output, "%02x", (unsigned int)*p);
+                  }
+                  fputc('\n', output);
+              }
+              fputs("END\n", output);
+              return fclose(output) == 0 ? 0 : 4;
+          }
+          C
+          cat > /tmp/validation_frida_argv.py <<'PY'
+          import importlib.metadata
+          import json
+          import os
+          import pathlib
+          import subprocess
+          import sys
+          import tempfile
+          import time
+          
+          import frida
+          
+          def read_args(path):
+              if not path.exists():
+                  return None
+              text = path.read_text()
+              if not text.endswith("END\n"):
+                  return None
+              return [bytes.fromhex(line).decode("utf-8") for line in text.splitlines()[:-1]]
+          
+          with tempfile.TemporaryDirectory(prefix="craft-frida-argv-") as folder:
+              root = pathlib.Path(folder)
+              program = root / "argv-fixture"
+              subprocess.run(["cc", "-O0", "/tmp/validation_frida_argv.c", "-o", str(program)], check=True)
+              script = root / "fixture.js"
+              script.write_text('console.log("FRIDA_ARGV_FIXTURE_READY");\n')
+              missing = str(root / "not-an-options-file")
+              cases = [
+                  ("plain", ["alpha", "two words", "café"], False),
+                  ("empty", ["", ""], False),
+                  ("version", ["--version"], False),
+                  ("help", ["--help"], False),
+                  ("quiet", ["-q"], False),
+                  ("unknown", ["--target-only"], False),
+                  ("separator", ["--", "-q", "trailing"], False),
+                  ("similar_long_option", ["--options-file-not", "value"], False),
+                  ("short_options_file", ["-O", missing], True),
+                  ("long_options_file", ["--options-file", missing], True),
+                  ("equals_options_file", ["--options-file=" + missing], True),
+              ]
+              device = frida.get_local_device()
+              cli = str(pathlib.Path(sys.executable).parent / "frida")
+              results = []
+              for name, argv, reserved in cases:
+                  native_path = root / (name + "-native.txt")
+                  pid = device.spawn([str(program), str(native_path), *argv])
+                  device.resume(pid)
+                  deadline = time.monotonic() + 5
+                  native = read_args(native_path)
+                  while native is None and time.monotonic() < deadline:
+                      time.sleep(0.01)
+                      native = read_args(native_path)
+                  assert native == argv, (name, native, argv)
+                  output_path = root / (name + "-product.txt")
+                  result = json.loads(subprocess.check_output(
+                      ["target/debug/examples/validation_frida_argv", cli, str(program), str(script), json.dumps([str(output_path), *argv])],
+                      text=True, env={**os.environ, "NO_COLOR":"1", "TERM":"dumb"},
+                  ))
+                  actual = read_args(output_path)
+                  deadline = time.monotonic() + 2
+                  while actual is None and result["ok"] and result.get("success") and time.monotonic() < deadline:
+                      time.sleep(0.01)
+                      actual = read_args(output_path)
+                  equal = actual == argv
+                  if os.getenv("EXPECT_FIXED"):
+                      if reserved:
+                          assert not result["ok"] and result["code"] == "bad_input" and actual is None, (name, result, actual)
+                      else:
+                          assert equal, (name, result, actual, argv)
+                  else:
+                      assert equal == (name in ("plain", "empty")), (name, result, actual, argv)
+                  row = {"case":name, "expected":argv, "native":native, "product_args":actual,
+                         "product_result":result, "reserved_options_file":reserved, "equal":equal}
+                  results.append(row)
+                  print(json.dumps(row, ensure_ascii=False), flush=True)
+              print(json.dumps({
+                  "frida": frida.__version__, "frida_tools": importlib.metadata.version("frida-tools"),
+                  "cases": len(results), "forwardable": sum(not row["reserved_options_file"] for row in results),
+                  "reserved": sum(row["reserved_options_file"] for row in results),
+                  "argument_mismatches": sum(not row["equal"] for row in results),
+              }), flush=True)
+          PY
+          "$RUNNER_TEMP/frida-oracle/bin/python" /tmp/validation_frida_argv.py
+      - name: Require an unchanged source tree
+        run: test -z "$(git status --porcelain)"

@@ -1,0 +1,35 @@
+name: Claude compressed Codex history regression
+on:
+  push:
+    branches: [validation/claude-codex-compressed-repro-20261111]
+permissions:
+  contents: read
+jobs:
+  baseline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: Afloat16/claude-mem
+          ref: 5651660b79e2c5ea4d2ffe8edb22742a3a15e4fd
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - name: Install repository dependencies
+        run: npm install --no-audit --no-fund
+      - name: Demonstrate failures against unchanged main
+        shell: bash
+        run: |
+          set +e
+          bun test tests/services/prompt-import/codex-compressed-history.test.ts --timeout 30000 2>&1 | tee /tmp/codex-compressed-baseline.log
+          result=${PIPESTATUS[0]}
+          set -e
+          test "$result" -eq 1
+          grep -F '6 fail' /tmp/codex-compressed-baseline.log
+          grep -F '3 pass' /tmp/codex-compressed-baseline.log

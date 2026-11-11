@@ -1,4 +1,4 @@
-name: Craft packet evidence completeness
+name: Craft packet latest-main integration
 on:
   push:
     branches: [validation/craft-packet-evidence-completeness-20261111]
@@ -26,7 +26,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: Afloat16/craft-anything
-          ref: b171ee291d98b86c137e2e02093fc181bd96db52
+          ref: 46c531c9d21c2dab35f2ae62d22c72786b931ea2
           path: candidate
           fetch-depth: 2
           persist-credentials: false
@@ -37,10 +37,12 @@ jobs:
           rustc --version
       - name: Check formatting before compilation
         run: cargo fmt --all -- --check
-      - name: Compare original and fixed code with actual packet and process limits
+      - name: Verify the tested packet change and current-main integration
         run: |
+          git fetch --no-tags --depth=1 origin 06342656204c5ef25d145ec632468914d2a2982e
           git fetch --no-tags --depth=1 origin adeddc9149b97c21e595e743c9875d84e805eece
-          python3 "$GITHUB_WORKSPACE/validation/.github/validation/packet_compare.py" core
+          git fetch --no-tags --depth=1 origin b171ee291d98b86c137e2e02093fc181bd96db52
+          python3 "$GITHUB_WORKSPACE/validation/.github/validation/packet_integration_identity.py"
       - name: Run complete engine, formats and testkit suites
         run: cargo --config 'profile.dev.package."*".opt-level=0' test --locked --no-fail-fast -p craft-anything-engine -p craft-anything-formats -p craft-anything-testkit
       - name: Run strict all-target Clippy
@@ -54,6 +56,6 @@ jobs:
         run: cargo --config 'profile.dev.package."*".opt-level=0' xtask wasm
       - name: Verify exact source and patch whitespace
         run: |
-          git diff --check adeddc9149b97c21e595e743c9875d84e805eece HEAD
+          git diff --check 06342656204c5ef25d145ec632468914d2a2982e HEAD
           git diff --exit-code
           test -z "$(git ls-files --others --exclude-standard)"

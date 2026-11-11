@@ -1,0 +1,47 @@
+name: Storage contribution validation
+on:
+  push:
+    branches: [validation/storage-20261111]
+jobs:
+  storage:
+    name: SQLite and MySQL storage regressions
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: bili-test-root
+          MYSQL_DATABASE: bili
+        ports: ["3306:3306"]
+        options: >-
+          --health-cmd="mysqladmin ping -uroot -pbili-test-root"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      BILI_MYSQL_TEST_DSN: mysql://root:bili-test-root@127.0.0.1:3306/bili
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm install --ignore-scripts --no-fund --no-audit
+      - run: npm run typecheck
+      - run: npm run build
+      - name: Confirm the prefix regression on unmodified master
+        shell: bash
+        run: |
+          git show dc041dd1ab1a014efa352ba47a6f31fc47f55284:src/storage/store.ts > src/storage/store.ts
+          git show dc041dd1ab1a014efa352ba47a6f31fc47f55284:src/storage/mysql.ts > src/storage/mysql.ts
+          set +e
+          node --import ./tests/preload-test-env.mjs --import tsx --test --test-reporter=tap --test-name-pattern='KV prefixes' tests/storage-backend-contract.test.ts > prefix-baseline.tap 2>&1
+          result=$?
+          set -e
+          cat prefix-baseline.tap
+          git restore --source=HEAD -- src/storage/store.ts src/storage/mysql.ts
+          test "$result" -eq 1
+          node -e "const s=require('fs').readFileSync('prefix-baseline.tap','utf8'); const a=require('node:assert/strict'); a.match(s, /# fail 2\\b/); a.equal((s.match(/code: 'ERR_ASSERTION'/g)||[]).length, 2)"
+      - name: Test the corrected storage contracts
+        run: node --import ./tests/preload-test-env.mjs --import tsx --test --test-concurrency=1 tests/storage-integrity-cache.test.ts tests/storage-media-sidecar-split.test.ts tests/storage-backend-contract.test.ts tests/storage-ext.test.ts tests/storage-null-identity.test.ts tests/media-cas.test.ts tests/fork-clone-media-refcount.test.ts

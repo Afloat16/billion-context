@@ -19,7 +19,7 @@ for big,thumb in [(False,False),(False,True),(True,False),(True,True)]:
     source.write_text(template.replace("MODE",mode))
     program=case/"fixture"
     target="armebv7-linux-gnueabi" if big else "armv7-linux-gnueabi"
-    command=["clang","--target="+target,"-march=armv7-a","-nostdlib","-static","-fuse-ld=lld","-Wl,--build-id=none","-Wl,-e,_start","-g",str(source),"-o",str(program)]
+    command=["clang","--target="+target,"-march=armv7-a","-nostdlib","-static","--ld-path=/usr/bin/ld.lld-18","-Wl,--build-id=none","-Wl,-e,_start","-g",str(source),"-o",str(program)]
     build=subprocess.run(command,text=True,capture_output=True,timeout=60)
     assert build.returncode == 0, (name,build.stdout,build.stderr)
     symbols=subprocess.check_output(["readelf","-Ws",str(program)],text=True)

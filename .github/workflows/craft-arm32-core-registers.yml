@@ -15,9 +15,9 @@ jobs:
           persist-credentials: false
       - name: Install native core producers and independent debugger
         run: |
-          sudo apt-get install -y --no-install-recommends qemu-user gdb-multiarch=15.1-1ubuntu1~24.04.1
+          sudo apt-get install -y --no-install-recommends qemu-user=1:8.2.2+ds-0ubuntu1.18 gdb-multiarch=15.1-1ubuntu1~24.04.1 lld-18
           gdb-multiarch -nx -q -batch -ex 'python import time; print("GDB_PYTHON_READY")'
           clang --version
-          ld.lld --version
+          ld.lld-18 --version
       - name: Execute four owned ARM programs and read the resulting guest cores
         run: python3 validation/.github/validation/arm_core_native.py

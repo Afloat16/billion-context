@@ -23,7 +23,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: Afloat16/craft-anything
-          ref: c42b932a58f2c9eee202519b456e44d9f4dd8672
+          ref: ae17c06c0aebd7d364d18b8f898991362277743e
           fetch-depth: 0
           persist-credentials: false
       - name: Install Rust and inspect Node

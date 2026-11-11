@@ -62,12 +62,14 @@ jobs:
                   "fragment_header_comments_do_not_hide_later_operations",
                   "parsed_and_fallback_api_facts_keep_names_after_header_trivia",
                   "runtime_name_holes_after_comments_remain_unknown",
+        "comments_without_a_following_selection_set_are_not_operations",
               ]
-              if result.returncode == 0 or "test result: FAILED. 3 passed; 7 failed;" not in result.stdout:
-                  raise SystemExit("Original source did not reproduce seven failures and three passing controls")
-              for name in failures:
-                  if "test " + name + " ... FAILED" not in result.stdout:
-                      raise SystemExit("Missing original-source failure: " + name)
+              if result.returncode == 0 or "test result: FAILED. 2 passed; 8 failed;" not in result.stdout:
+                  raise SystemExit("Original source did not reproduce eight failures and two passing controls")
+              failure_list = result.stdout.rsplit("failures:", 1)[-1].split("test result:", 1)[0]
+              actual_failures = {line.strip() for line in failure_list.splitlines() if line.strip()}
+              if actual_failures != set(failures):
+                  raise SystemExit("Unexpected original-source failure set: " + repr(actual_failures))
           finally:
               path.write_bytes(fixed)
           

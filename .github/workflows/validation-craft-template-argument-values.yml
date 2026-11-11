@@ -23,7 +23,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: Afloat16/craft-anything
-          ref: d6916369488b12f4548bb914f26d0b14ad62543f
+          ref: ffa4026bf6f31b76d710f464a42cd0d5c9a74436
           fetch-depth: 0
           persist-credentials: false
       - name: Install Rust
@@ -32,7 +32,7 @@ jobs:
           rustup default 1.99.0
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
         with:
-          key: craft-template-argument-values-full-v1
+          key: craft-template-argument-values-full-v2
           save-if: true
           cache-on-failure: true
       - name: Check formatting

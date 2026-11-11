@@ -1,0 +1,51 @@
+name: OpenMaus UTF8 shard comparison
+
+on:
+  push:
+    branches: [validation/openmaus-utf8-shard-20261111]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  shard:
+    name: ${{ matrix.label }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: unchanged-base
+            ref: 6f226f15def56c697626f2ed6dffac416510c79a
+          - label: utf8-pull-request
+            ref: fab23d915343ab499c12cced3a529d6d3d213a3f
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: Afloat16/OpenMausBot
+          ref: ${{ matrix.ref }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@ff378ebe6b225b0680b81c1ad4498ae0d1d3a5e3
+        with:
+          version: 10.33.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 24
+      - name: Install exact locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Prepare the Electron dependency used by the original job
+        run: node --input-type=commonjs -e "require('electron')"
+      - name: Run the original failing shard without changing assertions or timing
+        env:
+          OMB_VITEST_RETRY_LOG: ${{ runner.temp }}/vitest-retries.jsonl
+          OMB_VITEST_E2E: all
+          OMB_VITEST_SUBSET: ""
+          OMB_VITEST_WORKERS: "4"
+        run: pnpm exec vitest run --shard=6/8 --reporter=default --reporter=github-actions
+      - name: Summarize retries
+        if: always()
+        env:
+          OMB_VITEST_RETRY_LOG: ${{ runner.temp }}/vitest-retries.jsonl
+        run: node scripts/testing/ci-retry-summary.mjs

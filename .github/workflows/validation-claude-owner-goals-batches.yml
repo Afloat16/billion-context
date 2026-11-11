@@ -1,0 +1,106 @@
+name: Claude owner goals bounded initial mapping
+on:
+  push:
+    branches: [validation/claude-owner-goals-batches-20261111]
+permissions:
+  contents: read
+jobs:
+  baseline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      TZ: UTC
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: Afloat16/claude-mem
+          ref: 308a9ab4a141ac49ca0e72bbccc0c9cdf3770ca0
+          path: baseline
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: Afloat16/claude-mem
+          ref: a4e1c4d982a738b0493ccc69bab5067403397032
+          path: regression
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - name: Install baseline dependencies
+        working-directory: baseline
+        run: npm install --no-audit --no-fund
+      - name: Copy the same regression test and HTTP fixture only
+        run: |
+          cp regression/tests/work-view/owner-goals-batching.test.ts baseline/tests/work-view/owner-goals-batching.test.ts
+          cp regression/tests/helpers/fake-owner-goals-worker.ts baseline/tests/helpers/fake-owner-goals-worker.ts
+      - name: Demonstrate the oversized real baseline question
+        working-directory: baseline
+        run: |
+          python3 - <<'PY'
+          import subprocess
+          result = subprocess.run(["bun", "test", "tests/work-view/owner-goals-batching.test.ts", "-t", "bounds all 5,922 prompts", "--timeout", "120000"], text=True, capture_output=True)
+          output = result.stdout + result.stderr
+          print(output)
+          assert result.returncode != 0, "Baseline unexpectedly passed"
+          assert "toBeLessThanOrEqual" in output, "Expected the question-size assertion, not a setup/import failure"
+          assert "Cannot find module" not in output and "SyntaxError" not in output
+          print("Baseline reproduced: the 5,922-prompt API question exceeds 96 KiB.")
+          PY
+      - name: Preserve the existing incremental update control
+        working-directory: baseline
+        run: bun test tests/work-view/auto-refresh.test.ts -t 'updates the saved goals from only the prompts typed since' --timeout 30000
+  fixed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      TZ: UTC
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: Afloat16/claude-mem
+          ref: a4e1c4d982a738b0493ccc69bab5067403397032
+          fetch-depth: 3
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - name: Install repository dependencies
+        run: npm install --no-audit --no-fund
+      - name: Run real Python and HTTP mapping and failure regressions
+        run: bun test tests/work-view/owner-goals-batching.test.ts tests/worker/http/routes/work-view-focus-routes.test.ts --timeout 120000
+      - name: Run related owner prompt and My Work behavioral suites
+        run: bun test tests/services/prompt-import/ tests/work-view/ --timeout 30000
+      - name: Check root and viewer TypeScript
+        run: npm run typecheck
+      - name: Build all shipped bundles
+        run: node scripts/build-hooks.js
+      - name: Check patch whitespace
+        run: git diff --check 308a9ab4a141ac49ca0e72bbccc0c9cdf3770ca0 HEAD
+  windows:
+    runs-on: windows-2022
+    timeout-minutes: 30
+    env:
+      TZ: UTC
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: Afloat16/claude-mem
+          ref: a4e1c4d982a738b0493ccc69bab5067403397032
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - name: Install repository dependencies
+        run: npm install --no-audit --no-fund
+      - name: Verify native Windows Python saves and recovery
+        run: bun test tests/work-view/owner-goals-batching.test.ts --timeout 120000

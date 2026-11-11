@@ -1,13 +1,13 @@
-name: Validate complete bzip2 recovery against the native CLI
+name: Verify published bzip2 recovery files
 on:
   push:
     branches: ["validation/craft-bzip2-concatenation-20261111"]
 permissions:
   contents: read
 jobs:
-  prepare:
+  published:
     runs-on: ubuntu-24.04
-    timeout-minutes: 40
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -16,54 +16,41 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: Afloat16/craft-anything
-          ref: a22846cfda2551392c03c3bfbbdc046fd64d3ba2
+          ref: c16fae5391484a753a3a5bd13697c0dc6efb4967
+          fetch-depth: 3
           path: base
           persist-credentials: false
-      - name: Install fixed Rust
-        run: rustup toolchain install 1.99.0 --profile minimal --component rustfmt --component clippy --target wasm32-unknown-unknown
+      - name: Match published bytes to the successful preparation job
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib, json, subprocess
+          root=Path("base")
+          expected=json.loads(Path("validation/.github/validation/bzip2_published_files.json").read_text())
+          for path, content in expected["files"].items():
+              actual=(root/path).read_bytes()
+              assert actual == content.encode(), path
+              print("VALIDATED_FILE",path,hashlib.sha256(actual).hexdigest())
+          lock=hashlib.sha256((root/"Cargo.lock").read_bytes()).hexdigest()
+          assert lock == expected["lock_sha256"], lock
+          assert subprocess.check_output(["git","rev-parse","HEAD^"],cwd=root,text=True).strip() == "a22846cfda2551392c03c3bfbbdc046fd64d3ba2"
+          changed=set(subprocess.check_output(["git","diff","--name-only","3ce1ce9f52077a53811be8a0309fdbe85b16b417","HEAD"],cwd=root,text=True).splitlines())
+          assert changed == set(expected["files"]) | {"Cargo.lock","docs/ROADMAP.md","docs/STATUS.md","docs/pitfalls.md"}, changed
+          print("BZ2_PUBLISHED_IDENTITY="+json.dumps({"validated_run":expected["validated_run"],"validated_job":expected["validated_job"],"head":"c16fae5391484a753a3a5bd13697c0dc6efb4967","lock_sha256":lock,"changed_files":sorted(changed)}))
+          PY
+      - name: Install fixed Rust and formatter
+        run: rustup toolchain install 1.99.0 --profile minimal --component rustfmt
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
         with:
           workspaces: base -> target
           shared-key: craft-bzip2-concat-1.99
-      - name: Stage the previously validated regressions and probe
+      - name: Validate final documentation and clean checkout
+        working-directory: base
         run: |
-          mkdir -p base/crates/formats/examples
-          cp validation/.github/validation/bzip2_probe.rs base/crates/formats/examples/bzip2_probe.rs
-          cp validation/.github/validation/bzip2_members.rs base/crates/formats/tests/bzip2_members.rs
-          cd base
           rustup override set 1.99.0
-      - name: Regenerate the identical native CLI input matrix
-        run: python3 validation/.github/validation/bzip2_inputs.py
-      - name: Prepare proposed source and Cargo-resolved dependency change
-        run: python3 validation/.github/validation/bzip2_lockgen.py
-      - name: Rebuild fixed public decoder and compare complete native outputs
-        run: |
-          cd base
-          cargo build --locked -p craft-anything-formats --example bzip2_probe
-          cd ..
-          python3 validation/.github/validation/bzip2_compare.py
-          rm base/crates/formats/examples/bzip2_probe.rs
-      - name: Complete formats and engine suites and strict Clippy
-        working-directory: base
-        run: |
           cargo fmt --all --check
-          cargo test --locked -p craft-anything-formats -p craft-anything-engine --no-fail-fast
-          cargo clippy --locked -p craft-anything-formats -p craft-anything-engine --all-targets -- -D warnings
-      - name: Contracts and all L0-L2 WebAssembly builds
-        working-directory: base
-        run: |
           cargo xtask layers
           cargo xtask locks
           cargo xtask secrets
-          cargo xtask wasm
           git diff --check
-      - name: Assert exact prepared file scope
-        run: |
-          python3 - <<'PY'
-          import subprocess
-          expected={"Cargo.lock","crates/formats/Cargo.toml","crates/formats/src/decompress.rs","crates/formats/tests/bzip2_members.rs"}
-          output=subprocess.check_output(["git","status","--porcelain","--untracked-files=all"],cwd="base",text=True)
-          changed={line[3:] for line in output.splitlines()}
-          assert changed == expected, output
-          print("Prepared working files exactly:",sorted(changed))
-          PY
+          test -z "$(git status --porcelain)"

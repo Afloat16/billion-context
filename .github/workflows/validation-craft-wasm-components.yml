@@ -1,0 +1,95 @@
+name: WebAssembly component layout validation
+
+on:
+  push:
+    branches: [validation/craft-wasm-component-layout-20261111]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  formats:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      CARGO_INCREMENTAL: "0"
+      CARGO_BUILD_JOBS: "2"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+      CARGO_PROFILE_DEV_OPT_LEVEL: "0"
+      CARGO_TERM_COLOR: never
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: Afloat16/craft-anything
+          ref: f7884f8bbd641aeb5ab0666feb813e4daa3c113c
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install the validated Rust toolchain
+        run: |
+          rustup toolchain install 1.99.0 --profile minimal --component rustfmt --component clippy --target wasm32-unknown-unknown
+          rustup default 1.99.0
+          rustc --version
+      - name: Verify unchanged-source regression failures and controls
+        run: |
+          python3 - <<'PY'
+          import pathlib
+          import subprocess
+          source = pathlib.Path("crates/formats/src/wasm.rs")
+          fixed = source.read_bytes()
+          try:
+              original = subprocess.check_output(["git", "show", "80479a9b9e07babe1a7a96252784cba9c9c31451:crates/formats/src/wasm.rs"])
+              source.write_bytes(original)
+              result = subprocess.run(
+                  ["cargo", "--config", 'profile.dev.package."*".opt-level=0', "test", "--locked", "-p", "craft-anything-formats", "--test", "wasm_component_layout", "--", "--test-threads=1"],
+                  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+              )
+              print(result.stdout, flush=True)
+              failures = [
+                  "top_level_component_layout_preserves_ranges_and_order",
+                  "component_section_ids_use_component_names",
+                  "nested_module_metadata_does_not_become_component_metadata",
+                  "damaged_component_tail_keeps_only_available_layout",
+                  "invalid_nested_module_keeps_top_level_identity_and_reports_damage",
+                  "component_layout_and_custom_lists_obey_existing_limits",
+              ]
+              if result.returncode == 0 or "test result: FAILED. 2 passed; 6 failed;" not in result.stdout:
+                  raise SystemExit("Expected six component regressions and two passing core/empty-component controls")
+              for name in failures:
+                  if "test " + name + " ... FAILED" not in result.stdout:
+                      raise SystemExit("Missing expected semantic failure: " + name)
+          finally:
+              source.write_bytes(fixed)
+          PY
+      - name: Verify all corrected public component regressions
+        run: cargo --config 'profile.dev.package."*".opt-level=0' test --locked -p craft-anything-formats --test wasm_component_layout
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Run the complete formats suite
+        run: cargo --config 'profile.dev.package."*".opt-level=0' test --locked -p craft-anything-formats
+      - name: Run strict all-target Clippy
+        run: cargo --config 'profile.dev.package."*".opt-level=0' clippy --locked -p craft-anything-formats --all-targets -- -D warnings
+      - name: Check repository contracts
+        run: |
+          cargo --config 'profile.dev.package."*".opt-level=0' xtask layers
+          cargo --config 'profile.dev.package."*".opt-level=0' xtask locks
+          cargo --config 'profile.dev.package."*".opt-level=0' xtask secrets
+      - name: Check the complete WebAssembly layer gate
+        run: cargo --config 'profile.dev.package."*".opt-level=0' xtask wasm
+      - name: Check actual WAT-generated components with the public reader
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import pathlib
+          proof = pathlib.Path(os.environ["RUNNER_TEMP"]) / "component-layout-proof"
+          proof.joinpath("src").mkdir(parents=True, exist_ok=True)
+          source_path = pathlib.Path.cwd() / "crates/formats"
+          manifest = '[package]\nname="component-layout-proof"\nversion="0.1.0"\nedition="2024"\n[dependencies]\nwat="=1.261.0"\ncraft-anything-formats={path=' + json.dumps(str(source_path)) + '}\n'
+          proof.joinpath("Cargo.toml").write_text(manifest, encoding="utf-8")
+          proof.joinpath("src/main.rs").write_text("use craft_anything_formats::wasm::inspect;\n\nfn main() {\n    let cases: [(&str, &str, &[&str]); 8] = [\n        (\"empty\", \"(component)\", &[]),\n        (\"embedded-core\", \"(component (core module (func (export \\\"f\\\") (result i32) i32.const 42)))\", &[\"core-module\"]),\n        (\"nested-component\", \"(component (component (core module (func))))\", &[\"component\"]),\n        (\"function-type\", \"(component (type (func)))\", &[\"type\"]),\n        (\"core-instantiation\", \"(component (core module $m (func (export \\\"f\\\"))) (core instance (instantiate $m)))\", &[\"core-module\", \"core-instance\"]),\n        (\"function-import\", \"(component (type $f (func)) (import \\\"work\\\" (func (type $f))))\", &[\"type\", \"import\"]),\n        (\"instance-import\", \"(component (type $i (instance)) (import \\\"unit\\\" (instance (type $i))))\", &[\"type\", \"import\"]),\n        (\"function-reexport\", \"(component (type $f (func)) (import \\\"work\\\" (func $work (type $f))) (export \\\"work\\\" (func $work)))\", &[\"type\", \"import\", \"export\"]),\n    ];\n    for (label, source, expected) in cases {\n        let bytes = wat::parse_str(source).unwrap();\n        let report = inspect(&bytes).unwrap();\n        assert!(report.validation.valid, \"{label}: {:?}\", report.validation);\n        assert!(report.parse_error.is_none(), \"{label}: {:?}\", report.parse_error);\n        assert_eq!(report.encoding, \"component\", \"{label}\");\n        assert_eq!(report.version, 13, \"{label}\");\n        let actual = report.sections.iter().map(|s| s.name.as_str()).collect::<Vec<_>>();\n        assert_eq!(actual, expected, \"{label}\");\n        assert!(report.functions.is_empty() && report.imports.is_empty() && report.exports.is_empty(), \"{label}\");\n        assert!(report.sections.iter().all(|s| s.offset + s.size <= bytes.len() as u64), \"{label}\");\n        println!(\"{label}: {} generated bytes; top-level sections {:?}\", bytes.len(), actual);\n    }\n}\n", encoding="utf-8")
+          PY
+          cargo --config 'profile.dev.package."*".opt-level=0' run --manifest-path "$RUNNER_TEMP/component-layout-proof/Cargo.toml" --target-dir target
+      - name: Verify the tested tree remains unchanged
+        run: git diff --exit-code

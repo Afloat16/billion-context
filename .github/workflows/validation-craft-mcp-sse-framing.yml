@@ -1,0 +1,157 @@
+name: MCP SSE baseline against native EventSource
+
+on:
+  push:
+    branches: [validation/craft-mcp-sse-framing-20261111]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  mcp-sse:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      CARGO_INCREMENTAL: "0"
+      CARGO_BUILD_JOBS: "2"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+      CARGO_PROFILE_DEV_OPT_LEVEL: "0"
+      CARGO_TERM_COLOR: never
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: Afloat16/craft-anything
+          ref: adeddc9149b97c21e595e743c9875d84e805eece
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check native EventSource availability
+        run: node --experimental-eventsource -p 'typeof EventSource'
+      - name: Install Rust
+        run: |
+          rustup toolchain install 1.99.0 --profile minimal
+          rustup default 1.99.0
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
+        with:
+          key: craft-mcp-sse-framing-v1
+          save-if: true
+          cache-on-failure: true
+      - name: Compare original MCP replies with native EventSource
+        run: |
+          mkdir -p crates/engines/examples
+          trap 'rm -f crates/engines/examples/validation_mcp_sse.rs' EXIT
+          cat > crates/engines/examples/validation_mcp_sse.rs <<'RS'
+          use craft_anything_engines::mcp_client::{McpClient, Server, ServerUrl};
+          use serde_json::json;
+          use std::collections::BTreeMap;
+          use std::time::Duration;
+          
+          fn main() {
+              let url = std::env::args().nth(1).expect("loopback URL");
+              let result = McpClient::connect(
+                  "fixture",
+                  &Server::Url(ServerUrl { url, headers: BTreeMap::new() }),
+                  Duration::from_secs(5),
+              )
+              .and_then(|mut client| client.list_tools(Duration::from_secs(5)));
+              match result {
+                  Ok(tools) => println!("{}", json!({"ok": true, "tools": tools})),
+                  Err(error) => println!("{}", json!({"ok": false, "code": error.code, "message": error.message})),
+              }
+          }
+          RS
+          cargo --config 'profile.dev.package."*".opt-level=0' build --locked -p craft-anything-engines --example validation_mcp_sse
+          cat > /tmp/validation_mcp_sse.mjs <<'JS'
+          import assert from "node:assert/strict";
+          import http from "node:http";
+          import { spawn } from "node:child_process";
+          import { once } from "node:events";
+          
+          assert.equal(typeof EventSource, "function");
+          const answer = JSON.stringify({jsonrpc:"2.0", id:2, result:{tools:[{name:"echo_你好", inputSchema:{type:"object"}}]}});
+          const notice = JSON.stringify({jsonrpc:"2.0", method:"notifications/progress", params:{progress:1}});
+          const event = (value, ending) => "data: " + value + ending + ending;
+          const tests = [
+            {name:"lf", text:event(answer,"\n"), old:true, expected:true},
+            {name:"crlf", text:event(answer,"\r\n"), old:true, expected:true},
+            {name:"lf_notification_then_reply", text:event(notice,"\n")+event(answer,"\n"), old:true, expected:true},
+            {name:"cr_notification_then_reply", text:event(notice,"\r")+event(answer,"\r"), old:false, expected:true},
+            {name:"cr_comment_then_reply", text:": keepalive\r"+event(answer,"\r"), old:false, expected:true},
+            {name:"leading_bom_lf", text:"\uFEFF"+event(answer,"\n"), old:false, expected:true},
+            {name:"leading_bom_crlf", text:"\uFEFF"+event(answer,"\r\n"), old:false, expected:true},
+            {name:"leading_bom_cr", text:"\uFEFF"+event(answer,"\r"), old:false, expected:true},
+            {name:"mixed_line_endings", text:'data: {"jsonrpc":\rdata: "2.0",\ndata: "id":2,\r\ndata: "result":{"tools":[{"name":"echo_你好","inputSchema":{"type":"object"}}]}}\r\r', old:false, expected:true},
+            {name:"multiline_lf", text:'data: {"jsonrpc":\ndata: "2.0",\ndata: "id":2,\ndata: "result":{"tools":[{"name":"echo_你好","inputSchema":{"type":"object"}}]}}\n\n', old:true, expected:true},
+            {name:"comments_and_unknown_fields", text:": comment\nretry: 20\nid: server-event\nevent: message\n"+event(answer,"\n"), old:true, expected:true},
+            {name:"wrong_id_then_reply", text:event(answer.replace('"id":2','"id":99'),"\n")+event(answer,"\n"), old:true, expected:true},
+            {name:"bom_after_stream_start_is_not_stripped", text:"\n\uFEFF"+event(answer,"\n"), old:false, expected:false},
+            {name:"only_one_bom_is_stripped", text:"\uFEFF\uFEFF"+event(answer,"\n"), old:false, expected:false},
+            {name:"wrong_id_without_reply", text:event(answer.replace('"id":2','"id":99'),"\n"), old:false, expected:false},
+          ];
+          const server = http.createServer(async (req,res)=>{
+            const [index,mode] = req.url.slice(1).split("/");
+            const test = tests[Number(index)];
+            assert.ok(test, req.url);
+            if(mode==="events"){
+              res.writeHead(200, {"Content-Type":"text/event-stream", "Connection":"close"});
+              res.end(test.text);
+              return;
+            }
+            let body = "";
+            for await (const part of req) body += part;
+            const request = JSON.parse(body);
+            if(request.method==="initialize"){
+              const value=JSON.stringify({jsonrpc:"2.0",id:request.id,result:{protocolVersion:"2025-06-18",capabilities:{}}});
+              res.writeHead(200, {"Content-Type":"application/json","Content-Length":Buffer.byteLength(value),"Connection":"close"});
+              res.end(value);
+            }else if(request.method==="notifications/initialized"){
+              res.writeHead(202, {"Content-Length":"0","Connection":"close"}); res.end();
+            }else{
+              assert.equal(request.method,"tools/list");
+              res.writeHead(200, {"Content-Type":"text/event-stream","Content-Length":Buffer.byteLength(test.text),"Connection":"close"});
+              res.end(test.text);
+            }
+          });
+          server.listen(0,"127.0.0.1");
+          await once(server,"listening");
+          const base="http://127.0.0.1:"+server.address().port;
+          function reference(index){
+            return new Promise((resolve,reject)=>{
+              const source=new EventSource(base+"/"+index+"/events");
+              const timer=setTimeout(()=>{source.close();reject(new Error("EventSource timeout "+index));},3000);
+              function finish(value){clearTimeout(timer);source.close();resolve(value);}
+              source.onmessage=(ev)=>{const msg=JSON.parse(ev.data);if(msg.id===2)finish(msg.result.tools);};
+              source.onerror=()=>finish(null);
+            });
+          }
+          function production(index){
+            return new Promise((resolve,reject)=>{
+              const child=spawn("target/debug/examples/validation_mcp_sse",[base+"/"+index+"/mcp"],{stdio:["ignore","pipe","pipe"]});
+              let out="",err="";
+              child.stdout.on("data",b=>out+=b);
+              child.stderr.on("data",b=>err+=b);
+              child.on("error",reject);
+              child.on("close",code=>{if(code!==0)reject(new Error(err||"child exited "+code));else resolve(JSON.parse(out));});
+            });
+          }
+          const outcomes=[];
+          try{
+            for(let i=0;i<tests.length;i++){
+              const test=tests[i];
+              const ref=await reference(i);
+              assert.equal(ref!==null,test.expected,test.name+" reference");
+              const actual=await production(i);
+              const expected=process.env.EXPECT_FIXED==="1"?test.expected:test.old;
+              assert.equal(actual.ok,expected,test.name+" production "+JSON.stringify(actual));
+              if(actual.ok)assert.deepEqual(actual.tools,ref,test.name+" exact tools");
+              outcomes.push({name:test.name,reference:ref!==null,production:actual.ok,match:actual.ok===(ref!==null)});
+            }
+          }finally{
+            server.close();server.closeAllConnections();
+          }
+          console.log("MCP SSE / Node "+process.version+": "+JSON.stringify(outcomes));
+          console.log("MCP SSE cases="+outcomes.length+" mismatches="+outcomes.filter(r=>!r.match).length);
+          JS
+          node --experimental-eventsource /tmp/validation_mcp_sse.mjs
+          git diff --exit-code

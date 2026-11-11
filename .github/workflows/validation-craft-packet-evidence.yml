@@ -1,0 +1,70 @@
+name: Craft packet evidence completeness
+on:
+  push:
+    branches: [validation/craft-packet-evidence-completeness-20261111]
+permissions:
+  contents: read
+jobs:
+  packets:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 70
+    defaults:
+      run:
+        working-directory: candidate
+    env:
+      CARGO_INCREMENTAL: "0"
+      CARGO_BUILD_JOBS: "2"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+      CARGO_PROFILE_DEV_OPT_LEVEL: "0"
+      CARGO_TERM_COLOR: never
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          path: validation
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: Afloat16/craft-anything
+          ref: b171ee291d98b86c137e2e02093fc181bd96db52
+          path: candidate
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Install CI Rust, formatting, Clippy and WebAssembly support
+        run: |
+          rustup toolchain install 1.99.0 --profile minimal --component rustfmt --component clippy --target wasm32-unknown-unknown
+          rustup default 1.99.0
+          rustc --version
+      - name: Check formatting before compilation
+        run: cargo fmt --all -- --check
+      - name: Install Wireshark file tools from signed Ubuntu packages
+        run: |
+          if ! command -v tshark || ! command -v text2pcap || ! command -v editcap; then
+            printf '%s\n' 'Types: deb' 'URIs: https://archive.ubuntu.com/ubuntu' 'Suites: noble noble-updates noble-security' 'Components: main universe' 'Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg' > "$RUNNER_TEMP/packet-ubuntu.sources"
+            sudo apt-get -o Dir::Etc::sourcelist="$RUNNER_TEMP/packet-ubuntu.sources" -o Dir::Etc::sourceparts="-" update
+            sudo env DEBIAN_FRONTEND=noninteractive apt-get -o Dir::Etc::sourcelist="$RUNNER_TEMP/packet-ubuntu.sources" -o Dir::Etc::sourceparts="-" install --yes --no-install-recommends tshark wireshark-common
+          fi
+      - name: Generate and independently read native capture fixtures
+        run: |
+          echo "PACKET_VALIDATION_FIXTURES=$RUNNER_TEMP/packet-fixtures" >> "$GITHUB_ENV"
+          PACKET_VALIDATION_FIXTURES="$RUNNER_TEMP/packet-fixtures" python3 "$GITHUB_WORKSPACE/validation/.github/validation/packet_native_fixtures.py"
+      - name: Compare original and fixed code with actual limits and native files
+        run: |
+          git fetch --no-tags --depth=1 origin adeddc9149b97c21e595e743c9875d84e805eece
+          python3 "$GITHUB_WORKSPACE/validation/.github/validation/packet_compare.py"
+      - name: Run complete engine, formats and testkit suites
+        run: cargo --config 'profile.dev.package."*".opt-level=0' test --locked --no-fail-fast -p craft-anything-engine -p craft-anything-formats -p craft-anything-testkit
+      - name: Run strict all-target Clippy
+        run: cargo --config 'profile.dev.package."*".opt-level=0' clippy --locked -p craft-anything-engine -p craft-anything-formats -p craft-anything-testkit --all-targets -- -D warnings
+      - name: Check layers, locks and secrets
+        run: |
+          cargo --config 'profile.dev.package."*".opt-level=0' xtask layers
+          cargo --config 'profile.dev.package."*".opt-level=0' xtask locks
+          cargo --config 'profile.dev.package."*".opt-level=0' xtask secrets
+      - name: Check complete WebAssembly layer gate
+        run: cargo --config 'profile.dev.package."*".opt-level=0' xtask wasm
+      - name: Verify exact source and patch whitespace
+        run: |
+          git diff --check adeddc9149b97c21e595e743c9875d84e805eece HEAD
+          git diff --exit-code
+          test -z "$(git ls-files --others --exclude-standard)"

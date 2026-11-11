@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "repo": "storytold/craft-anything",
+  "branch": "bugfix/r3.12-packet-evidence-completeness-20261111",
+  "base": "adeddc9149b97c21e595e743c9875d84e805eece",
+  "claim": "2f77a0504a945dee13583e1b893356710189f741",
+  "head": "b171ee291d98b86c137e2e02093fc181bd96db52",
+  "state": "implementation_published_validation_pending",
+  "actual_pr": false,
+  "merged": false,
+  "scope": "Propagate capture, flow and inventory incompleteness through all three packet evidence tools; do not count incomplete tshark TSV records after the existing stdout cap.",
+  "source_files": [
+    "crates/engine/src/tools/packet_tools.rs",
+    "crates/engine/tests/packet_evidence_completeness.rs"
+  ],
+  "dedupe": {
+    "rejected_candidate": "pcapng if_tsoffset already merged in #397; timestamp/record budget corrections already merged in #1091",
+    "checked_related_prs": [
+      397,
+      421,
+      433,
+      514,
+      714,
+      722,
+      884,
+      986,
+      1091,
+      1247
+    ],
+    "searches": [
+      "is:pr \"pcap\" \"coverage\":29 reviewed source-compatible hits",
+      "is:pr \"caps_hit\":0",
+      "is:pr \"tshark_output_capped\":0",
+      "is:issue \"packet\" \"coverage\":0",
+      "is:pr \"inventory\" \"partial\":9 unrelated hits"
+    ]
+  },
+  "planned_validation": {
+    "focused_tests": 13,
+    "native_tests": 5,
+    "actual_limits": {
+      "packets": 5000000,
+      "flows": 100000,
+      "inventory_values": 10000,
+      "tshark_output_bytes": 67108864
+    },
+    "baseline_expected": "10 focused failures / 3 complete-boundary controls; 3 native failures / 2 controls",
+    "gates": [
+      "full engine/formats/testkit",
+      "fmt",
+      "strict all-target Clippy",
+      "layers",
+      "locks",
+      "secrets",
+      "Wasm"
+    ]
+  },
+  "publication": "Do not retry the previously rejected craft PR permission action; prepare a complete prefilled compare URL after required validation."
+}

@@ -1,0 +1,27 @@
+name: Claude GitHub SSH product probe
+on:
+  push:
+    branches: [validation/claude-github-ssh-probe-20261111]
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: Afloat16/claude-mem
+          ref: 22d148ea6f34b86ea9a6e0911c7a7a0c71431b31
+          path: subject
+          sparse-checkout: src/services/work-view/work-product.mjs
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Capture real Git push output through a local SSH transport fixture
+        run: node validation/claude-github-ssh-probe.mjs

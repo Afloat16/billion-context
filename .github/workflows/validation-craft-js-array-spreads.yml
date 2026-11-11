@@ -9,9 +9,9 @@ permissions:
   contents: read
 
 jobs:
-  javascript-and-analysis:
+  javascript:
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 30
     env:
       CARGO_INCREMENTAL: "0"
       CARGO_BUILD_JOBS: "2"
@@ -23,148 +23,33 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: Afloat16/craft-anything
-          ref: ae17c06c0aebd7d364d18b8f898991362277743e
+          ref: 5e62cf4eb0d4183149130573ab26c15306eb5b3a
           fetch-depth: 0
           persist-credentials: false
-      - name: Install Rust and inspect Node
+      - name: Verify only the validation status changed
         run: |
-          rustup toolchain install 1.99.0 --profile minimal --component rustfmt --component clippy --target wasm32-unknown-unknown
+          python3 - <<'PY'
+          import subprocess
+          paths = subprocess.check_output(
+              ["git", "diff", "--name-only", "ae17c06c0aebd7d364d18b8f898991362277743e", "HEAD"], text=True,
+          ).splitlines()
+          if paths != ["docs/ROADMAP.md", "docs/STATUS.md"]:
+              raise SystemExit("Expected the fully tested implementation and dependencies to remain identical: " + repr(paths))
+          print("All production, test, dependency and workflow files match validated commit ae17c06c exactly.")
+          PY
+      - name: Install the validated Rust toolchain
+        run: |
+          rustup toolchain install 1.99.0 --profile minimal --component rustfmt
           rustup default 1.99.0
           rustc --version
-          node --version
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
         with:
           key: craft-js-array-spreads-v1
           save-if: true
           cache-on-failure: true
-      - name: Check formatting
-        run: cargo fmt --all -- --check
-      - name: Verify original-source failures and controls through both public APIs
-        run: |
-          python3 - <<'PY'
-          import pathlib
-          import subprocess
-          paths = [
-              pathlib.Path("crates/js/src/bundle.rs"),
-              pathlib.Path("crates/js/src/model.rs"),
-              pathlib.Path("crates/analysis/src/js_app.rs"),
-          ]
-          fixed = {path: path.read_bytes() for path in paths}
-          try:
-              for path in paths:
-                  original = subprocess.check_output(["git", "show", "2cee4610f07164920ca9f02cd75cd84fa99cba3b:" + path.as_posix()])
-                  path.write_bytes(original)
-              suites = [
-                  ("craft-anything-js", "bundle_array_spreads", 2, [
-                      "an_unknown_spread_stops_static_array_module_indices",
-                      "literal_spreads_also_leave_unproven_module_indices",
-                      "chunk_arrays_use_the_same_index_boundary",
-                      "holes_before_a_spread_keep_their_known_indices",
-                  ]),
-                  ("craft-anything-analysis", "bundle_array_spread_coverage", 1, [
-                      "array_spread_unknowns_reach_the_application_graph",
-                      "one_partial_bundle_does_not_discard_other_files_modules",
-                  ]),
-              ]
-              for package, target, controls, failures in suites:
-                  result = subprocess.run(
-                      ["cargo", "--config", 'profile.dev.package."*".opt-level=0', "test", "--locked",
-                       "-p", package, "--test", target, "--", "--test-threads=1"],
-                      stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
-                  )
-                  print(result.stdout, flush=True)
-                  summary = "test result: FAILED. " + str(controls) + " passed; " + str(len(failures)) + " failed;"
-                  if result.returncode == 0 or summary not in result.stdout:
-                      raise SystemExit("Expected semantic failures and controls for " + target)
-                  for name in failures:
-                      if "test " + name + " ... FAILED" not in result.stdout:
-                          raise SystemExit("Missing expected semantic failure: " + name)
-          finally:
-              for path, content in fixed.items():
-                  path.write_bytes(content)
-          PY
-      - name: Run the full JavaScript and analysis suites
-        run: cargo --config 'profile.dev.package."*".opt-level=0' test --locked -p craft-anything-js -p craft-anything-analysis
-      - name: Compare retained modules with real Node array indices
-        run: |
-          mkdir -p crates/js/examples
-          trap 'rm -f crates/js/examples/validation_array_oracle.rs; rmdir crates/js/examples 2>/dev/null || true' EXIT
-          cat > crates/js/examples/validation_array_oracle.rs <<'RS'
-          use std::io::Read;
-
-          fn main() -> Result<(), Box<dyn std::error::Error>> {
-              let mut source = String::new();
-              std::io::stdin().read_to_string(&mut source)?;
-              let result = craft_anything_js::analyze("bundle.js", &source, &craft_anything_js::Limits::default());
-              println!("{}", serde_json::to_string(&result)?);
-              Ok(())
-          }
-          RS
-          cargo --config 'profile.dev.package."*".opt-level=0' build --locked -p craft-anything-js --example validation_array_oracle
-          node <<'JS'
-          const assert = require("node:assert/strict");
-          const { spawnSync } = require("node:child_process");
-          const tail = Array.from({ length: 8 }, (_, i) => "function(e){e.exports=" + (i + 3) + "}").join(",");
-          const prefix = "function(e,t,r){e.exports=r(1)},function(e){e.exports=32}";
-          const spreadModules = [function(e) { e.exports = 81; }, function(e) { e.exports = 82; }];
-          const fixtures = [
-            ["empty", prefix + ",...more," + tail, [], ["0", "1"], true, false],
-            ["two-items", prefix + ",...more," + tail, spreadModules, ["0", "1"], true, false],
-            ["unicode-string", prefix + ",...'😀'," + tail, [], ["0", "1"], true, false],
-            ["chunk", prefix + ",...more," + tail, spreadModules, ["0", "1"], true, true],
-            ["sparse", "function(e,t,r){r(2)},,function(e){e.exports=32},...more," + tail, [], ["0", "2"], true, false],
-            ["ordinary", "function(e,t,r){r(2)},,function(e){e.exports=32}", [], ["0", "2"], false, false],
-          ];
-          function observe(fn) {
-            const module = { exports: {} };
-            const calls = [];
-            fn(module, module.exports, id => { calls.push(String(id)); return String(id) + "-value"; });
-            return { exports: module.exports, calls };
-          }
-          for (const [name, elements, more, ids, incomplete, chunk] of fixtures) {
-            const source = chunk
-              ? "self.webpackChunkx.push([[13],[" + elements + "]]);"
-              : "var __webpack_modules__=[" + elements + "];";
-            const run = spawnSync("target/debug/examples/validation_array_oracle", {
-              input: source, encoding: "utf8", timeout: 30000, maxBuffer: 4 * 1024 * 1024,
-            });
-            assert.equal(run.status, 0, run.stderr);
-            const result = JSON.parse(run.stdout);
-            assert.equal(result.facts.parse_errors, 0);
-            assert.deepEqual(result.bundle.modules.map(module => module.id), ids, name);
-            assert.equal(result.bundle.truncated, incomplete, name);
-            const self = { webpackChunkx: [] };
-            const array = chunk
-              ? (new Function("self", "more", source)(self, more), self.webpackChunkx[0][1])
-              : new Function("more", source + ";return __webpack_modules__;")(more);
-            const bytes = Buffer.from(source);
-            for (const module of result.bundle.modules) {
-              const original = array[Number(module.id)];
-              assert.equal(typeof original, "function", name);
-              const body = bytes.subarray(module.body[0], module.body[1]).toString("utf8");
-              const recovered = new Function(...module.params, body);
-              assert.deepEqual(observe(recovered), observe(original), name + ":" + module.id);
-              assert.deepEqual(module.deps, [...new Set(observe(original).calls)], name + ": dependencies");
-            }
-            if (name === "empty" || name === "two-items") {
-              const actualTailIndex = array.findIndex(fn => typeof fn === "function" && observe(fn).exports === 3);
-              assert.notEqual(actualTailIndex, 3);
-              console.log(name + ": syntax slot 3 is actual array index " + actualTailIndex);
-            }
-            console.log("Node and production analyzer agree on known indices: " + name);
-          }
-          console.log("All 6 array-index/runtime comparisons passed");
-          JS
-      - name: Run strict all-target Clippy
-        run: cargo --config 'profile.dev.package."*".opt-level=0' clippy --locked -p craft-anything-js -p craft-anything-analysis --all-targets -- -D warnings
-      - name: Check repository contracts
-        run: |
-          cargo --config 'profile.dev.package."*".opt-level=0' xtask layers
-          cargo --config 'profile.dev.package."*".opt-level=0' xtask locks
-          cargo --config 'profile.dev.package."*".opt-level=0' xtask secrets
-      - name: Check all WebAssembly layers
-        run: cargo --config 'profile.dev.package."*".opt-level=0' xtask wasm
-      - name: Require formatting and an unchanged tree
+      - name: Check the final document revision
         run: |
           cargo fmt --all -- --check
+          cargo --config 'profile.dev.package."*".opt-level=0' xtask secrets
+          git diff --check ae17c06c0aebd7d364d18b8f898991362277743e HEAD
           git diff --exit-code

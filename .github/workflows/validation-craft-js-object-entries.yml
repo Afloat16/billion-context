@@ -23,7 +23,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: Afloat16/craft-anything
-          ref: f67ae1f1166d605a3632ec5e07682204d754ba89
+          ref: cb2749e16b64652e85d09b885e9cf2a4de1792c9
           fetch-depth: 0
           persist-credentials: false
       - name: Install the validated Rust toolchain
@@ -37,8 +37,7 @@ jobs:
           key: craft-js-object-entries-v1
           save-if: true
           cache-on-failure: true
-      - name: Report formatting differences
-        continue-on-error: true
+      - name: Check formatting
         run: cargo fmt --all -- --check
       - name: Verify unchanged-source regression failures and control
         run: |

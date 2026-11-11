@@ -1,0 +1,144 @@
+name: Reference-source globstar matching baseline
+
+on:
+  push:
+    branches: [validation/craft-ignore-globstar-work-20261111]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ignore-globstar:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      CARGO_INCREMENTAL: "0"
+      CARGO_BUILD_JOBS: "2"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+      CARGO_PROFILE_DEV_OPT_LEVEL: "0"
+      CARGO_TERM_COLOR: never
+      SOURCE_HEAD: 3a9ad9c6c5de05701d423b8c7e9cc37b550a7170
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: Afloat16/craft-anything
+          ref: 3a9ad9c6c5de05701d423b8c7e9cc37b550a7170
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install Rust
+        run: |
+          rustup toolchain install 1.99.0 --profile minimal --component rustfmt --component clippy --target wasm32-unknown-unknown
+          rustup default 1.99.0
+          rustc --version
+          node --version
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
+        with:
+          key: craft-ignore-globstar-probe-v1
+          save-if: true
+          cache-on-failure: true
+      - name: Measure unchanged public ignore matching on real source paths
+        run: |
+          mkdir -p crates/analysis/examples
+          trap 'rm -f crates/analysis/examples/validation_gitignore_globstar.rs' EXIT
+          cat > crates/analysis/examples/validation_gitignore_globstar.rs <<'RUST'
+          use craft_anything_analysis::js_source::Ignore;
+          use std::{hint::black_box, io::Read, time::Instant};
+          
+          fn main() {
+              let mut text = String::new();
+              std::io::stdin().read_to_string(&mut text).unwrap();
+              let input: serde_json::Value = serde_json::from_str(&text).unwrap();
+              let rules = input["rules"].as_str().unwrap();
+              let paths: Vec<&str> = input["paths"].as_array().unwrap().iter().map(|p| p.as_str().unwrap()).collect();
+              let repeats = input["repeats"].as_u64().unwrap() as usize;
+              let mut ignore = Ignore::default();
+              ignore.add_file("", rules);
+              let matches: Vec<bool> = paths.iter().map(|path| ignore.is_ignored(path, false)).collect();
+              let mut samples = Vec::new();
+              let mut total = 0usize;
+              for _ in 0..3 {
+                  let start = Instant::now();
+                  for _ in 0..repeats {
+                      for path in &paths {
+                          total += usize::from(black_box(&ignore).is_ignored(black_box(path), false));
+                      }
+                  }
+                  samples.push(start.elapsed().as_micros());
+              }
+              println!("{}", serde_json::json!({"matches": matches, "samples_us": samples, "total_matches": total}));
+          }
+          RUST
+          cargo --config 'profile.dev.package."*".opt-level=0' --config 'profile.dev.package.craft-anything-analysis.opt-level=3' build --locked -p craft-anything-analysis --example validation_gitignore_globstar
+          node <<'NODE'
+          const assert = require("node:assert/strict");
+          const fs = require("node:fs");
+          const path = require("node:path");
+          const { spawnSync, execFileSync } = require("node:child_process");
+          const binary = path.resolve("target/debug/examples/validation_gitignore_globstar");
+          const root = fs.mkdtempSync(path.join(process.env.RUNNER_TEMP, "craft-ignore-globstar-"));
+          execFileSync("git", ["-C", root, "init", "-q"]);
+          const shortPaths = [
+            "file.js", "src/file.js", "src/deep/file.js", "src/keep/file.js",
+            "src/keep/deep/file.js", "other/src/file.js", "other/src/deep/file.js",
+            "a/file.js", "a/b/file.js", "a/deep/b/file.js", "ab/file.js",
+            ".hidden/file.js", "src/file.ts", "src/deep/file.ts", "src/file.jsx",
+            "source/file.js", "keep/file.js", "src/é雪/file.js", "has space/file.js",
+            "prefix/src/keep/file.js",
+          ];
+          for (const filename of shortPaths) {
+            fs.mkdirSync(path.dirname(path.join(root, filename)), { recursive: true });
+            fs.writeFileSync(path.join(root, filename), "export default 1;\n");
+          }
+          const patterns = [
+            "**/file.js", "src/**/file.js", "**/src/**/file.js",
+            "**/a*/**/file.?s", "**/[ab]*/**/file.js", "*/**/file.js",
+            "**/file.js\n!**/keep/**/file.js", "src/**/file.js\n!src/keep/**/file.js",
+            "/src/**/file.js", "a/**/b/**/file.js", "**/never.js", "**/*.ts",
+          ];
+          let comparisons = 0;
+          for (const rules of patterns) {
+            fs.writeFileSync(path.join(root, ".gitignore"), rules + "\n");
+            const checked = spawnSync("git", ["-C", root, "check-ignore", "--no-index", "-z", "--stdin"], {
+              input: shortPaths.join("\0") + "\0", encoding: "utf8",
+            });
+            assert.ok(checked.status === 0 || checked.status === 1, checked.stderr);
+            const expected = new Set(checked.stdout.split("\0").filter(Boolean));
+            const actual = JSON.parse(execFileSync(binary, {
+              input: JSON.stringify({ rules, paths: shortPaths, repeats: 0 }), encoding: "utf8",
+            }));
+            assert.deepEqual(actual.matches, shortPaths.map(p => expected.has(p)), rules);
+            comparisons += shortPaths.length;
+          }
+          const rows = [];
+          for (const depth of [6, 12, 24, 36]) {
+            const segments = Array.from({ length: depth }, (_, i) => String(i).padStart(2, "0") + "d".repeat(97));
+            const paths = Array.from({ length: 8 }, (_, i) => [...segments, "leaf-" + i + ".js"].join("/"));
+            for (const filename of paths) {
+              const absolute = path.join(root, filename);
+              assert.ok(Buffer.byteLength(absolute) < 4096);
+              fs.mkdirSync(path.dirname(absolute), { recursive: true });
+              fs.writeFileSync(absolute, "export default 1;\n");
+              assert.equal(fs.readFileSync(absolute, "utf8"), "export default 1;\n");
+            }
+            const actual = JSON.parse(execFileSync(binary, {
+              input: JSON.stringify({ rules: "**/never.js", paths, repeats: 25 }),
+              encoding: "utf8", timeout: 120000,
+            }));
+            assert.ok(actual.matches.every(v => !v));
+            assert.equal(actual.total_matches, 0);
+            const sorted = [...actual.samples_us].sort((a, b) => a - b);
+            const row = { depth, pathBytes: Buffer.byteLength(paths[0]), paths: paths.length, checksPerSample: paths.length * 25,
+              median_us: sorted[1], samples_us: actual.samples_us };
+            rows.push(row);
+            console.log("IGNORE_GLOBSTAR_ROW " + JSON.stringify(row));
+          }
+          console.log("IGNORE_GLOBSTAR_EVIDENCE " + JSON.stringify({
+            git: execFileSync("git", ["--version"], { encoding: "utf8" }).trim(), node: process.version,
+            semanticComparisons: comparisons, nativeFiles: shortPaths.length + 32,
+            source: process.env.SOURCE_HEAD, matcherOptLevel: 3, rows,
+          }));
+          NODE
+      - name: Require an unchanged tree
+        run: git diff --exit-code

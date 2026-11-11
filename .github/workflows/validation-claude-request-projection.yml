@@ -1,0 +1,57 @@
+name: Claude request projection session lookup comparison
+on:
+  push:
+    branches: [validation/claude-request-projection-20261111]
+permissions:
+  contents: read
+jobs:
+  comparison:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: Afloat16/claude-mem
+          ref: 44b8e8c9ad5b2ef6e2c95ef3b05cc43a7f06cd11
+          fetch-depth: 3
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - name: Install repository dependencies
+        run: |
+          echo "CLAUDE_MEM_DATA_DIR=$RUNNER_TEMP/request-projection-data" >> "$GITHUB_ENV"
+          npm install --no-audit --no-fund
+      - name: Prove baseline semantics and repeated unrelated prompt reads
+        run: |
+          git fetch --no-tags origin a90a9b602d90d58e0a43e6a46a923c413e79d6e7
+          git checkout --detach a90a9b602d90d58e0a43e6a46a923c413e79d6e7
+          set +e
+          bun test tests/worker/work-view/request-projection-scaling.test.ts 2>&1 | tee "$RUNNER_TEMP/request-projection-baseline.log"
+          result=${PIPESTATUS[0]}
+          set -e
+          test "$result" -eq 1
+          grep -F '(pass) request projection session prompt lookup > retains original selection' "$RUNNER_TEMP/request-projection-baseline.log"
+          grep -F '(pass) request projection session prompt lookup > rebuilds the per-snapshot lookup' "$RUNNER_TEMP/request-projection-baseline.log"
+          grep -F '(fail) request projection session prompt lookup > does not rescan unrelated prompts' "$RUNNER_TEMP/request-projection-baseline.log"
+      - name: Measure baseline production projection with real default SQLite window
+        run: BENCHMARK_LABEL=main bun tests/fixtures/work-view-prompt-benchmark.ts "$RUNNER_TEMP/request-projection-main.json"
+      - name: Verify optimized lookup and full result equality
+        run: |
+          git checkout --detach 44b8e8c9ad5b2ef6e2c95ef3b05cc43a7f06cd11
+          bun test tests/worker/work-view/request-projection-scaling.test.ts
+          BENCHMARK_LABEL=fixed bun tests/fixtures/work-view-prompt-benchmark.ts "$RUNNER_TEMP/request-projection-fixed.json"
+          cmp "$RUNNER_TEMP/request-projection-main.json" "$RUNNER_TEMP/request-projection-fixed.json"
+      - name: Check related work view behavior
+        run: bun test tests/worker/work-view --timeout 120000
+      - name: Check root and viewer TypeScript
+        run: npm run typecheck
+      - name: Build all shipped bundles
+        run: node scripts/build-hooks.js
+      - name: Check patch and lane ownership
+        run: |
+          git diff --check 29f62ad423db16d581e8053d90f150471d5c3a17 HEAD
+          bun scripts/test-lanes.ts check

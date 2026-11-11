@@ -23,7 +23,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: Afloat16/craft-anything
-          ref: 22c44d01d271c49187104802459085f273f855f0
+          ref: debc7600479d7d7d8ebfc229cb6ddf267243b099
           fetch-depth: 0
           persist-credentials: false
       - name: Install Rust
@@ -34,10 +34,47 @@ jobs:
           node --version
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
         with:
-          key: craft-gitignore-boundaries-probe-v1
+          key: craft-gitignore-boundaries-full-v1
           save-if: true
           cache-on-failure: true
-      - name: Compare original reference-source ignore matching with Git
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Reproduce original ignore boundary failures and controls
+        run: |
+          python3 - <<'PY'
+          import pathlib
+          import subprocess
+          path = pathlib.Path("crates/analysis/src/js_source.rs")
+          fixed = path.read_bytes()
+          try:
+              path.write_bytes(subprocess.check_output(["git", "show", "22c44d01d271c49187104802459085f273f855f0:" + path.as_posix()]))
+              result = subprocess.run(
+                  ["cargo", "--config", 'profile.dev.package."*".opt-level=0', "test", "--locked",
+                   "-p", "craft-anything-analysis", "--test", "gitignore_boundary_escapes", "--", "--nocapture"],
+                  text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+              )
+              print(result.stdout, end="")
+              failures = {
+                  "leading_escaped_glob_characters_remain_literal",
+                  "leading_literal_backslashes_are_not_consumed_twice",
+                  "escaped_trailing_spaces_survive_padding_removal",
+                  "non_space_trailing_whitespace_is_part_of_the_filename",
+                  "an_unfinished_escape_never_matches_or_negates_a_rule",
+                  "line_endings_remove_only_one_carriage_return",
+                  "escaped_names_respect_the_nested_ignore_file_base",
+              }
+              if result.returncode == 0 or "test result: FAILED. 2 passed; 7 failed;" not in result.stdout:
+                  raise SystemExit("Original source did not reproduce seven failures and two passing controls")
+              failure_list = result.stdout.rsplit("failures:", 1)[-1].split("test result:", 1)[0]
+              actual_failures = {line.strip() for line in failure_list.splitlines() if line.strip()}
+              if actual_failures != failures:
+                  raise SystemExit("Unexpected original-source failure set: " + repr(actual_failures))
+          finally:
+              path.write_bytes(fixed)
+          PY
+      - name: Run the full analysis suite
+        run: cargo --config 'profile.dev.package."*".opt-level=0' test --locked -p craft-anything-analysis
+      - name: Compare fixed reference-source ignore matching with Git
         run: |
           mkdir -p crates/analysis/examples
           trap 'rm -f crates/analysis/examples/validation_ignore_boundaries.rs' EXIT
@@ -295,21 +332,27 @@ jobs:
               const mismatches = test.paths.filter((_, position) => craft[index][position] !== expected[position]);
               outcomes.push({ name: test.name, paths: test.paths, git: expected, craft: craft[index], mismatches });
             });
-            const byName = name => outcomes.find(test => test.name === name);
-            assert.deepEqual(byName("leading_star").git, [true, false, true, false]);
-            assert.notDeepEqual(byName("leading_star").craft, byName("leading_star").git);
-            assert.deepEqual(byName("escaped_trailing_space").git, [true, false, true]);
-            assert.notDeepEqual(byName("escaped_trailing_space").craft, byName("escaped_trailing_space").git);
-            assert.deepEqual(byName("invalid_terminal_escape").git, [false, false]);
-            assert.notDeepEqual(byName("invalid_terminal_escape").craft, byName("invalid_terminal_escape").git);
-            for (const name of ["escaped_hash", "escaped_bang", "ordinary_glob_and_negation", "anchored_literal_star", "escaped_ordinary_character"]) {
-              assert.deepEqual(byName(name).craft, byName(name).git, name);
+            const reference = {"leading_star":[true,false,true,false],"leading_question":[true,false,false],"leading_bracket":[true,false,false],"leading_backslash":[true,false],"escaped_hash":[true,false],"escaped_bang":[true,false],"escaped_trailing_space":[true,false,true],"escaped_space_then_padding":[true,false,false],"escaped_backslash_then_padding":[true,false,false],"invalid_terminal_escape":[false,false],"invalid_negation_escape":[true,true],"literal_trailing_tab":[true,false],"literal_trailing_nbsp":[true,false],"terminal_carriage_without_newline":[true,false],"escaped_space_before_crlf":[true,false],"two_carriages_before_newline":[true,false],"ordinary_glob_and_negation":[true,false,false,true,false],"nested_ignore_base":[true,false,false,false],"anchored_literal_star":[true,false,false],"escaped_ordinary_character":[true,false,false]};
+            for (const outcome of outcomes) {
+              assert.deepEqual(outcome.git, reference[outcome.name], outcome.name + " original Git contract");
+              assert.deepEqual(outcome.craft, outcome.git, outcome.name + " fixed ignore matching");
             }
-            console.log("Original ignore boundary comparison / " + execFileSync("git", ["--version"], { encoding: "utf8" }).trim() +
+            console.log("Fixed ignore boundary comparison / " + execFileSync("git", ["--version"], { encoding: "utf8" }).trim() +
               " / Node " + process.version + ": " + JSON.stringify(outcomes));
           } finally {
             fs.rmSync(root, { recursive: true, force: true });
           }
           NODE
-      - name: Require an unchanged source tree
-        run: git diff --exit-code
+      - name: Run strict all-target analysis Clippy
+        run: cargo --config 'profile.dev.package."*".opt-level=0' clippy --locked -p craft-anything-analysis --all-targets -- -D warnings
+      - name: Check repository contracts
+        run: |
+          cargo --config 'profile.dev.package."*".opt-level=0' xtask layers
+          cargo --config 'profile.dev.package."*".opt-level=0' xtask locks
+          cargo --config 'profile.dev.package."*".opt-level=0' xtask secrets
+      - name: Check all WebAssembly layers
+        run: cargo --config 'profile.dev.package."*".opt-level=0' xtask wasm
+      - name: Require formatting and an unchanged source tree
+        run: |
+          cargo fmt --all -- --check
+          git diff --exit-code

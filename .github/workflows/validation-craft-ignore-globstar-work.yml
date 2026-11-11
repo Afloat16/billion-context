@@ -1,4 +1,4 @@
-name: Reference-source globstar matching validation
+name: Reference-source ignore matching final-document validation
 
 on:
   push:
@@ -19,204 +19,35 @@ jobs:
       CARGO_PROFILE_TEST_DEBUG: "0"
       CARGO_PROFILE_DEV_OPT_LEVEL: "0"
       CARGO_TERM_COLOR: never
-      SOURCE_HEAD: 422bbdcaa8b687ad4d68f2dc8997bfa2a4aea10e
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: Afloat16/craft-anything
-          ref: 422bbdcaa8b687ad4d68f2dc8997bfa2a4aea10e
+          ref: 525951df9541dd8a95d4c5bfa91c2ce3b8d8612c
           fetch-depth: 0
           persist-credentials: false
       - name: Install Rust
         run: |
-          rustup toolchain install 1.99.0 --profile minimal --component rustfmt --component clippy --target wasm32-unknown-unknown
+          rustup toolchain install 1.99.0 --profile minimal --component rustfmt
           rustup default 1.99.0
-          rustc --version
-          node --version
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
         with:
           key: craft-ignore-globstar-full-v2
           save-if: true
           cache-on-failure: true
-      - name: Check formatting
-        run: cargo fmt --all -- --check
-      - name: Keep the original matcher compatibility controls
+      - name: Verify unchanged implementation, tests and dependencies
         run: |
           python3 - <<'PY'
-          import pathlib
           import subprocess
-          path = pathlib.Path("crates/analysis/src/js_source.rs")
-          fixed = path.read_bytes()
-          try:
-              path.write_bytes(subprocess.check_output(["git", "show", "adeddc9149b97c21e595e743c9875d84e805eece:" + path.as_posix()]))
-              result = subprocess.run(
-                  ["cargo", "--config", 'profile.dev.package."*".opt-level=0', "test", "--locked",
-                   "-p", "craft-anything-analysis", "--test", "gitignore_globstar"],
-                  text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-              )
-              print(result.stdout, end="")
-              if result.returncode or "test result: ok. 8 passed; 0 failed;" not in result.stdout:
-                  raise SystemExit("The original source must pass all eight compatibility controls")
-          finally:
-              path.write_bytes(fixed)
+          base = "422bbdcaa8b687ad4d68f2dc8997bfa2a4aea10e"
+          changed = set(subprocess.check_output(["git", "diff", "--name-only", base, "HEAD"], text=True).splitlines())
+          assert changed == {"docs/ROADMAP.md", "docs/STATUS.md"}, changed
+          subprocess.run(["git", "diff", "--exit-code", base, "HEAD", "--", ".", ":(exclude)docs/ROADMAP.md", ":(exclude)docs/STATUS.md"], check=True)
+          print("All implementation, test and dependency files are identical to the fully validated source.")
           PY
-      - name: Run the complete analysis suite
-        run: cargo --config 'profile.dev.package."*".opt-level=0' test --locked -p craft-anything-analysis
-      - name: Compare old and new optimized matchers on the same native inputs
-        run: |
-          mkdir -p crates/analysis/examples
-          trap 'rm -f crates/analysis/examples/validation_gitignore_globstar.rs' EXIT
-          cat > crates/analysis/examples/validation_gitignore_globstar.rs <<'RUST'
-          use craft_anything_analysis::js_source::Ignore;
-          use std::{hint::black_box, io::Read, time::Instant};
-          
-          fn main() {
-              let mut text = String::new();
-              std::io::stdin().read_to_string(&mut text).unwrap();
-              let input: serde_json::Value = serde_json::from_str(&text).unwrap();
-              let rules = input["rules"].as_str().unwrap();
-              let paths: Vec<&str> = input["paths"].as_array().unwrap().iter().map(|p| p.as_str().unwrap()).collect();
-              let repeats = input["repeats"].as_u64().unwrap() as usize;
-              let mut ignore = Ignore::default();
-              ignore.add_file("", rules);
-              let matches: Vec<bool> = paths.iter().map(|path| ignore.is_ignored(path, false)).collect();
-              let mut samples = Vec::new();
-              let mut total = 0usize;
-              for _ in 0..3 {
-                  let start = Instant::now();
-                  for _ in 0..repeats {
-                      for path in &paths {
-                          total += usize::from(black_box(&ignore).is_ignored(black_box(path), false));
-                      }
-                  }
-                  samples.push(start.elapsed().as_micros());
-              }
-              println!("{}", serde_json::json!({"matches": matches, "samples_us": samples, "total_matches": total}));
-          }
-          RUST
-          cat > "$RUNNER_TEMP/craft-ignore-globstar-oracle.cjs" <<'NODE'
-          const assert = require("node:assert/strict");
-          const fs = require("node:fs");
-          const path = require("node:path");
-          const { spawnSync, execFileSync } = require("node:child_process");
-          const binary = path.resolve("target/debug/examples/validation_gitignore_globstar");
-          const root = fs.mkdtempSync(path.join(process.env.RUNNER_TEMP, "craft-ignore-globstar-"));
-          execFileSync("git", ["-C", root, "init", "-q"]);
-          const shortPaths = [
-            "file.js", "src/file.js", "src/deep/file.js", "src/keep/file.js",
-            "src/keep/deep/file.js", "other/src/file.js", "other/src/deep/file.js",
-            "a/file.js", "a/b/file.js", "a/deep/b/file.js", "ab/file.js",
-            ".hidden/file.js", "src/file.ts", "src/deep/file.ts", "src/file.jsx",
-            "source/file.js", "keep/file.js", "src/é雪/file.js", "has space/file.js",
-            "prefix/src/keep/file.js",
-          ];
-          for (const filename of shortPaths) {
-            fs.mkdirSync(path.dirname(path.join(root, filename)), { recursive: true });
-            fs.writeFileSync(path.join(root, filename), "export default 1;\n");
-          }
-          const patterns = [
-            "**/file.js", "src/**/file.js", "**/src/**/file.js",
-            "**/a*/**/file.?s", "**/[ab]*/**/file.js", "*/**/file.js",
-            "**/file.js\n!**/keep/**/file.js", "src/**/file.js\n!src/keep/**/file.js",
-            "/src/**/file.js", "a/**/b/**/file.js", "**/never.js", "**/*.ts",
-          ];
-          let comparisons = 0;
-          for (const rules of patterns) {
-            fs.writeFileSync(path.join(root, ".gitignore"), rules + "\n");
-            const checked = spawnSync("git", ["-C", root, "check-ignore", "--no-index", "-z", "--stdin"], {
-              input: shortPaths.join("\0") + "\0", encoding: "utf8",
-            });
-            assert.ok(checked.status === 0 || checked.status === 1, checked.stderr);
-            const expected = new Set(checked.stdout.split("\0").filter(Boolean));
-            const actual = JSON.parse(execFileSync(binary, {
-              input: JSON.stringify({ rules, paths: shortPaths, repeats: 0 }), encoding: "utf8",
-            }));
-            assert.deepEqual(actual.matches, shortPaths.map(p => expected.has(p)), rules);
-            comparisons += shortPaths.length;
-          }
-          const rows = [];
-          for (const depth of [6, 12, 24, 36]) {
-            const segments = Array.from({ length: depth }, (_, i) => String(i).padStart(2, "0") + "d".repeat(97));
-            const paths = Array.from({ length: 8 }, (_, i) => [...segments, "leaf-" + i + ".js"].join("/"));
-            for (const filename of paths) {
-              const absolute = path.join(root, filename);
-              assert.ok(Buffer.byteLength(absolute) < 4096);
-              fs.mkdirSync(path.dirname(absolute), { recursive: true });
-              fs.writeFileSync(absolute, "export default 1;\n");
-              assert.equal(fs.readFileSync(absolute, "utf8"), "export default 1;\n");
-            }
-            const actual = JSON.parse(execFileSync(binary, {
-              input: JSON.stringify({ rules: "**/never.js", paths, repeats: 25 }),
-              encoding: "utf8", timeout: 120000,
-            }));
-            assert.ok(actual.matches.every(v => !v));
-            assert.equal(actual.total_matches, 0);
-            const sorted = [...actual.samples_us].sort((a, b) => a - b);
-            const row = { depth, pathBytes: Buffer.byteLength(paths[0]), paths: paths.length, checksPerSample: paths.length * 25,
-              median_us: sorted[1], samples_us: actual.samples_us };
-            rows.push(row);
-            console.log("IGNORE_GLOBSTAR_ROW " + JSON.stringify(row));
-          }
-          console.log("IGNORE_GLOBSTAR_EVIDENCE " + JSON.stringify({
-            git: execFileSync("git", ["--version"], { encoding: "utf8" }).trim(), node: process.version,
-            semanticComparisons: comparisons, nativeFiles: shortPaths.length + 32,
-            source: process.env.SOURCE_HEAD, matcherOptLevel: 3, rows,
-          }));
-          NODE
-          python3 - <<'PY'
-          import json
-          import os
-          import pathlib
-          import subprocess
-          path = pathlib.Path("crates/analysis/src/js_source.rs")
-          fixed = path.read_bytes()
-          base = "adeddc9149b97c21e595e743c9875d84e805eece"
-          head = "422bbdcaa8b687ad4d68f2dc8997bfa2a4aea10e"
-          evidence = {}
-          try:
-              for variant, source, content in [
-                  ("baseline", base, subprocess.check_output(["git", "show", base + ":" + path.as_posix()])),
-                  ("fixed", head, fixed),
-              ]:
-                  path.write_bytes(content)
-                  subprocess.run(["cargo", "--config", 'profile.dev.package."*".opt-level=0',
-                                  "--config", "profile.dev.package.craft-anything-analysis.opt-level=3",
-                                  "build", "--locked", "-p", "craft-anything-analysis",
-                                  "--example", "validation_gitignore_globstar"], check=True)
-                  env = dict(os.environ, SOURCE_HEAD=source)
-                  result = subprocess.run(["node", os.path.join(os.environ["RUNNER_TEMP"], "craft-ignore-globstar-oracle.cjs")],
-                                          env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=True)
-                  print(variant + " native comparison")
-                  print(result.stdout, end="")
-                  line = next(line for line in result.stdout.splitlines() if line.startswith("IGNORE_GLOBSTAR_EVIDENCE "))
-                  evidence[variant] = json.loads(line.removeprefix("IGNORE_GLOBSTAR_EVIDENCE "))
-          finally:
-              path.write_bytes(fixed)
-          before = evidence["baseline"]
-          after = evidence["fixed"]
-          assert before["semanticComparisons"] == after["semanticComparisons"] == 240
-          assert before["nativeFiles"] == after["nativeFiles"] == 52
-          rows = []
-          for old, new in zip(before["rows"], after["rows"], strict=True):
-              assert old["pathBytes"] == new["pathBytes"]
-              assert old["checksPerSample"] == new["checksPerSample"] == 200
-              rows.append({"pathBytes": old["pathBytes"], "baseline_us": old["median_us"],
-                           "fixed_us": new["median_us"], "speedup": old["median_us"] / max(1, new["median_us"])})
-          assert rows[-1]["speedup"] > 5, rows
-          print("IGNORE_GLOBSTAR_COMPARISON " + json.dumps({"rows": rows, "semantics_match_native_git": 240,
-                "matcher_opt_level": 3, "same_runner": True}))
-          PY
-      - name: Run strict all-target Clippy
-        run: cargo --config 'profile.dev.package."*".opt-level=0' clippy --locked -p craft-anything-analysis --all-targets -- -D warnings
-      - name: Check repository contracts
-        run: |
-          cargo --config 'profile.dev.package."*".opt-level=0' xtask layers
-          cargo --config 'profile.dev.package."*".opt-level=0' xtask locks
-          cargo --config 'profile.dev.package."*".opt-level=0' xtask secrets
-      - name: Check all WebAssembly layers
-        run: cargo --config 'profile.dev.package."*".opt-level=0' xtask wasm
-      - name: Require formatting and an unchanged tree
+      - name: Validate final documents
         run: |
           cargo fmt --all -- --check
-          git diff --check
+          cargo --config 'profile.dev.package."*".opt-level=0' xtask secrets
+          git diff --check 422bbdcaa8b687ad4d68f2dc8997bfa2a4aea10e HEAD
           git diff --exit-code

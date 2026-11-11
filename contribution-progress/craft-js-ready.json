@@ -146,6 +146,185 @@
       },
       "actual_pr": null,
       "merged_at": null
+    },
+    {
+      "id": "craft-js-14-ignore-globstar-work",
+      "status": "ready_pending_pr",
+      "upstream": "storytold/craft-anything",
+      "base": "adeddc9149b97c21e595e743c9875d84e805eece",
+      "claim": "be6534f1e5a42fa0727807eb24c3ae523317a781",
+      "branch": "bugfix/r3.12-ignore-globstar-work-20261111",
+      "head": "525951df9541dd8a95d4c5bfa91c2ce3b8d8612c",
+      "tree": "eac68db953fa2714bb8ee7570602646bfbd11429",
+      "tested_head": "422bbdcaa8b687ad4d68f2dc8997bfa2a4aea10e",
+      "title": "Avoid quadratic scans in reference-source ignore matching (R3.12)",
+      "body": "## Problem\n\nFor every pathname position, the `**/` token scans the remaining suffix again to find a matching slash boundary. An unmatched rule therefore does quadratic work as paths grow. This cost is paid while importing reference source trees and can repeat for every ignore rule and source file.\n\n## Change\n\nCarry a suffix-match flag while visiting the pathname backwards. Each position contributes its slash-boundary match once; the flag is reset for each pattern token. The empty-directory alternative still reads the next token row directly.\n\nThe change keeps the existing matcher structure and allocation bounds. Public controls cover zero and multiple directories, component boundaries, repeated globstars, ordinary wildcards and character classes, ordered negations, nested ignore files, Unicode and long paths.\n\nRoadmap: R3.12. Claim `be6534f1` was published before implementation. The branch is based on `adeddc91`.\n\n## Validation\n\n- All **8 public compatibility groups pass on both the original and revised matcher**.\n- Complete analysis suite: **164 passed, 0 failed, 0 ignored across 19 test targets**, including doc tests.\n- Both implementations match Git 2.56.0 on the same **240 pattern/path comparisons**. The native oracle creates and reads **52 actual files**, including deep paths below Linux's pathname limit.\n- On one Ubuntu 24.04 runner with Rust 1.99, the analysis crate's matcher compiled at optimization level 3. Each table entry is the median of three samples of **200 public `Ignore::is_ignored` calls** for one unmatched `**/never.js` rule:\n\n| Relative pathname bytes | Original | Revised | Speedup |\n| --- | ---: | ---: | ---: |\n| 609 | 29.917 ms | 3.123 ms | 9.6× |\n| 1,209 | 109.344 ms | 5.948 ms | 18.4× |\n| 2,409 | 419.532 ms | 11.816 ms | 35.5× |\n| 3,609 | 948.990 ms | 17.568 ms | 54.0× |\n\nThese measurements isolate ignore matching on the recorded inputs. They show the avoided suffix rescans; complete source-import speed also depends on file reading and parsing.\n\n- Strict all-target analysis Clippy, workspace formatting, layer and lock checks, secret scan, all L0–L2 WebAssembly builds and clean-tree checks pass.\n- Final head `525951df` changes only ROADMAP and STATUS relative to tested `422bbdca`. The final frozen-head run confirms every implementation, test and dependency file is identical, then reruns formatting, the secret scan and diff checks.\n\nEvidence:\n- [Initial native Git and optimized-matcher baseline](https://github.com/Afloat16/billion-context/actions/runs/43048933349/job/130620444100)\n- [Same-run original/revised measurements, full suite and repository gates](https://github.com/Afloat16/billion-context/actions/runs/43051956453/job/130631191804)\n- [Final-document and implementation identity checks](https://github.com/Afloat16/billion-context/actions/runs/43053565395/job/130636923199)\n\nThe first full run stopped at formatting. Its follow-up only compacted one test call; production code and assertions were unchanged before the successful complete run above.\n",
+      "compare_url": "https://github.com/storytold/craft-anything/compare/main...Afloat16:bugfix/r3.12-ignore-globstar-work-20261111?expand=1&title=Avoid%20quadratic%20scans%20in%20reference-source%20ignore%20matching%20(R3.12)&body=%23%23%20Problem%0A%0AFor%20every%20pathname%20position%2C%20the%20%60**%2F%60%20token%20scans%20the%20remaining%20suffix%20again%20to%20find%20a%20matching%20slash%20boundary.%20An%20unmatched%20rule%20therefore%20does%20quadratic%20work%20as%20paths%20grow.%20This%20cost%20is%20paid%20while%20importing%20reference%20source%20trees%20and%20can%20repeat%20for%20every%20ignore%20rule%20and%20source%20file.%0A%0A%23%23%20Change%0A%0ACarry%20a%20suffix-match%20flag%20while%20visiting%20the%20pathname%20backwards.%20Each%20position%20contributes%20its%20slash-boundary%20match%20once%3B%20the%20flag%20is%20reset%20for%20each%20pattern%20token.%20The%20empty-directory%20alternative%20still%20reads%20the%20next%20token%20row%20directly.%0A%0AThe%20change%20keeps%20the%20existing%20matcher%20structure%20and%20allocation%20bounds.%20Public%20controls%20cover%20zero%20and%20multiple%20directories%2C%20component%20boundaries%2C%20repeated%20globstars%2C%20ordinary%20wildcards%20and%20character%20classes%2C%20ordered%20negations%2C%20nested%20ignore%20files%2C%20Unicode%20and%20long%20paths.%0A%0ARoadmap%3A%20R3.12.%20Claim%20%60be6534f1%60%20was%20published%20before%20implementation.%20The%20branch%20is%20based%20on%20%60adeddc91%60.%0A%0A%23%23%20Validation%0A%0A-%20All%20**8%20public%20compatibility%20groups%20pass%20on%20both%20the%20original%20and%20revised%20matcher**.%0A-%20Complete%20analysis%20suite%3A%20**164%20passed%2C%200%20failed%2C%200%20ignored%20across%2019%20test%20targets**%2C%20including%20doc%20tests.%0A-%20Both%20implementations%20match%20Git%202.56.0%20on%20the%20same%20**240%20pattern%2Fpath%20comparisons**.%20The%20native%20oracle%20creates%20and%20reads%20**52%20actual%20files**%2C%20including%20deep%20paths%20below%20Linux's%20pathname%20limit.%0A-%20On%20one%20Ubuntu%2024.04%20runner%20with%20Rust%201.99%2C%20the%20analysis%20crate's%20matcher%20compiled%20at%20optimization%20level%203.%20Each%20table%20entry%20is%20the%20median%20of%20three%20samples%20of%20**200%20public%20%60Ignore%3A%3Ais_ignored%60%20calls**%20for%20one%20unmatched%20%60**%2Fnever.js%60%20rule%3A%0A%0A%7C%20Relative%20pathname%20bytes%20%7C%20Original%20%7C%20Revised%20%7C%20Speedup%20%7C%0A%7C%20---%20%7C%20---%3A%20%7C%20---%3A%20%7C%20---%3A%20%7C%0A%7C%20609%20%7C%2029.917%20ms%20%7C%203.123%20ms%20%7C%209.6%C3%97%20%7C%0A%7C%201%2C209%20%7C%20109.344%20ms%20%7C%205.948%20ms%20%7C%2018.4%C3%97%20%7C%0A%7C%202%2C409%20%7C%20419.532%20ms%20%7C%2011.816%20ms%20%7C%2035.5%C3%97%20%7C%0A%7C%203%2C609%20%7C%20948.990%20ms%20%7C%2017.568%20ms%20%7C%2054.0%C3%97%20%7C%0A%0AThese%20measurements%20isolate%20ignore%20matching%20on%20the%20recorded%20inputs.%20They%20show%20the%20avoided%20suffix%20rescans%3B%20complete%20source-import%20speed%20also%20depends%20on%20file%20reading%20and%20parsing.%0A%0A-%20Strict%20all-target%20analysis%20Clippy%2C%20workspace%20formatting%2C%20layer%20and%20lock%20checks%2C%20secret%20scan%2C%20all%20L0%E2%80%93L2%20WebAssembly%20builds%20and%20clean-tree%20checks%20pass.%0A-%20Final%20head%20%60525951df%60%20changes%20only%20ROADMAP%20and%20STATUS%20relative%20to%20tested%20%60422bbdca%60.%20The%20final%20frozen-head%20run%20confirms%20every%20implementation%2C%20test%20and%20dependency%20file%20is%20identical%2C%20then%20reruns%20formatting%2C%20the%20secret%20scan%20and%20diff%20checks.%0A%0AEvidence%3A%0A-%20%5BInitial%20native%20Git%20and%20optimized-matcher%20baseline%5D(https%3A%2F%2Fgithub.com%2FAfloat16%2Fbillion-context%2Factions%2Fruns%2F43048933349%2Fjob%2F130620444100)%0A-%20%5BSame-run%20original%2Frevised%20measurements%2C%20full%20suite%20and%20repository%20gates%5D(https%3A%2F%2Fgithub.com%2FAfloat16%2Fbillion-context%2Factions%2Fruns%2F43051956453%2Fjob%2F130631191804)%0A-%20%5BFinal-document%20and%20implementation%20identity%20checks%5D(https%3A%2F%2Fgithub.com%2FAfloat16%2Fbillion-context%2Factions%2Fruns%2F43053565395%2Fjob%2F130636923199)%0A%0AThe%20first%20full%20run%20stopped%20at%20formatting.%20Its%20follow-up%20only%20compacted%20one%20test%20call%3B%20production%20code%20and%20assertions%20were%20unchanged%20before%20the%20successful%20complete%20run%20above.%0A",
+      "validation_url": "https://github.com/Afloat16/billion-context/actions/runs/43051956453/job/130631191804",
+      "final_documents_validation_url": "https://github.com/Afloat16/billion-context/actions/runs/43053565395/job/130636923199",
+      "native_baseline_url": "https://github.com/Afloat16/billion-context/actions/runs/43048933349/job/130620444100",
+      "test_counts": {
+        "passed": 164,
+        "failed": 0,
+        "ignored": 0,
+        "targets": 19
+      },
+      "negative_controls": {
+        "failed": 0,
+        "passed": 8,
+        "kind": "compatibility controls; performance comparison is the negative control"
+      },
+      "performance": {
+        "rows": [
+          {
+            "pathBytes": 609,
+            "baseline_us": 29917,
+            "fixed_us": 3123,
+            "speedup": 9.57957092539225
+          },
+          {
+            "pathBytes": 1209,
+            "baseline_us": 109344,
+            "fixed_us": 5948,
+            "speedup": 18.38332212508406
+          },
+          {
+            "pathBytes": 2409,
+            "baseline_us": 419532,
+            "fixed_us": 11816,
+            "speedup": 35.505416384563304
+          },
+          {
+            "pathBytes": 3609,
+            "baseline_us": 948990,
+            "fixed_us": 17568,
+            "speedup": 54.018101092896174
+          }
+        ],
+        "semantics_match_native_git": 240,
+        "matcher_opt_level": 3,
+        "same_runner": true
+      },
+      "native_results": [
+        {
+          "git": "git version 2.56.0",
+          "node": "v22.23.4",
+          "semanticComparisons": 240,
+          "nativeFiles": 52,
+          "source": "adeddc9149b97c21e595e743c9875d84e805eece",
+          "matcherOptLevel": 3,
+          "rows": [
+            {
+              "depth": 6,
+              "pathBytes": 609,
+              "paths": 8,
+              "checksPerSample": 200,
+              "median_us": 29917,
+              "samples_us": [
+                30471,
+                29693,
+                29917
+              ]
+            },
+            {
+              "depth": 12,
+              "pathBytes": 1209,
+              "paths": 8,
+              "checksPerSample": 200,
+              "median_us": 109344,
+              "samples_us": [
+                110461,
+                109344,
+                109092
+              ]
+            },
+            {
+              "depth": 24,
+              "pathBytes": 2409,
+              "paths": 8,
+              "checksPerSample": 200,
+              "median_us": 419532,
+              "samples_us": [
+                419532,
+                421450,
+                419389
+              ]
+            },
+            {
+              "depth": 36,
+              "pathBytes": 3609,
+              "paths": 8,
+              "checksPerSample": 200,
+              "median_us": 948990,
+              "samples_us": [
+                948990,
+                948991,
+                947337
+              ]
+            }
+          ]
+        },
+        {
+          "git": "git version 2.56.0",
+          "node": "v22.23.4",
+          "semanticComparisons": 240,
+          "nativeFiles": 52,
+          "source": "422bbdcaa8b687ad4d68f2dc8997bfa2a4aea10e",
+          "matcherOptLevel": 3,
+          "rows": [
+            {
+              "depth": 6,
+              "pathBytes": 609,
+              "paths": 8,
+              "checksPerSample": 200,
+              "median_us": 3123,
+              "samples_us": [
+                3162,
+                3123,
+                3084
+              ]
+            },
+            {
+              "depth": 12,
+              "pathBytes": 1209,
+              "paths": 8,
+              "checksPerSample": 200,
+              "median_us": 5948,
+              "samples_us": [
+                5998,
+                5933,
+                5948
+              ]
+            },
+            {
+              "depth": 24,
+              "pathBytes": 2409,
+              "paths": 8,
+              "checksPerSample": 200,
+              "median_us": 11816,
+              "samples_us": [
+                11889,
+                11798,
+                11816
+              ]
+            },
+            {
+              "depth": 36,
+              "pathBytes": 3609,
+              "paths": 8,
+              "checksPerSample": 200,
+              "median_us": 17568,
+              "samples_us": [
+                17718,
+                17562,
+                17568
+              ]
+            }
+          ]
+        }
+      ],
+      "actual_pr": null,
+      "merged_at": null
     }
   ]
 }

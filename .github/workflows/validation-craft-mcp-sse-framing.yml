@@ -1,4 +1,4 @@
-name: MCP SSE baseline against native EventSource
+name: MCP event-stream framing full validation
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
 jobs:
   mcp-sse:
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 75
     env:
       CARGO_INCREMENTAL: "0"
       CARGO_BUILD_JOBS: "2"
@@ -23,21 +23,55 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: Afloat16/craft-anything
-          ref: adeddc9149b97c21e595e743c9875d84e805eece
+          ref: 8b5ac2e2fc223e29ce6faafc579f00ad5b511a8f
           fetch-depth: 0
           persist-credentials: false
       - name: Check native EventSource availability
         run: node --experimental-eventsource -p 'typeof EventSource'
       - name: Install Rust
         run: |
-          rustup toolchain install 1.99.0 --profile minimal
+          rustup toolchain install 1.99.0 --profile minimal --component rustfmt --component clippy --target wasm32-unknown-unknown
           rustup default 1.99.0
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
         with:
-          key: craft-mcp-sse-framing-v1
+          key: craft-mcp-sse-framing-full-v1
           save-if: true
           cache-on-failure: true
-      - name: Compare original MCP replies with native EventSource
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Reproduce the original public-client framing failures
+        run: |
+          python3 - <<'PY'
+          import pathlib
+          import subprocess
+          path = pathlib.Path("crates/engines/src/mcp_client.rs")
+          fixed = path.read_bytes()
+          failures = {
+              "carriage_return_delimits_notifications_and_the_answer",
+              "carriage_return_comments_do_not_hide_the_answer",
+              "a_single_initial_bom_is_removed_for_every_line_ending",
+              "mixed_line_endings_join_multiline_json_data",
+              "a_complete_carriage_return_event_returns_before_the_stream_closes",
+          }
+          try:
+              path.write_bytes(subprocess.check_output(["git", "show", "041a9bed1f3041647036ea36ef3e67a6e0cd12a5:" + path.as_posix()]))
+              result = subprocess.run(
+                  ["cargo", "--config", 'profile.dev.package."*".opt-level=0', "test", "--locked",
+                   "-p", "craft-anything-engines", "--test", "mcp_sse_framing", "--", "--nocapture"],
+                  text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+              )
+              print(result.stdout, end="")
+              if result.returncode == 0 or "test result: FAILED. 5 passed; 5 failed;" not in result.stdout:
+                  raise SystemExit("Expected five framing failures and five controls on the unchanged client")
+              listed = result.stdout.rsplit("failures:", 1)[-1].split("test result:", 1)[0]
+              actual = {line.strip() for line in listed.splitlines() if line.strip()}
+              assert actual == failures, actual
+          finally:
+              path.write_bytes(fixed)
+          PY
+      - name: Run the complete external-engine suite
+        run: cargo --config 'profile.dev.package."*".opt-level=0' test --locked -p craft-anything-engines
+      - name: Compare fixed MCP replies with native EventSource
         run: |
           mkdir -p crates/engines/examples
           trap 'rm -f crates/engines/examples/validation_mcp_sse.rs' EXIT
@@ -153,5 +187,19 @@ jobs:
           console.log("MCP SSE / Node "+process.version+": "+JSON.stringify(outcomes));
           console.log("MCP SSE cases="+outcomes.length+" mismatches="+outcomes.filter(r=>!r.match).length);
           JS
-          node --experimental-eventsource /tmp/validation_mcp_sse.mjs
+          EXPECT_FIXED=1 node --experimental-eventsource /tmp/validation_mcp_sse.mjs
+          git diff --exit-code
+      - name: Run strict all-target Clippy
+        run: cargo --config 'profile.dev.package."*".opt-level=0' clippy --locked -p craft-anything-engines --all-targets -- -D warnings
+      - name: Check repository contracts
+        run: |
+          cargo --config 'profile.dev.package."*".opt-level=0' xtask layers
+          cargo --config 'profile.dev.package."*".opt-level=0' xtask locks
+          cargo --config 'profile.dev.package."*".opt-level=0' xtask secrets
+      - name: Check all WebAssembly layers
+        run: cargo --config 'profile.dev.package."*".opt-level=0' xtask wasm
+      - name: Require formatting and an unchanged source tree
+        run: |
+          cargo fmt --all -- --check
+          git diff --check
           git diff --exit-code

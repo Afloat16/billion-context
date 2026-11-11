@@ -1,28 +1,66 @@
-name: Craft Java attribute formatting preparation
+name: Craft Java attribute framing validation
 on:
   push:
     branches: [validation/craft-java-attribute-framing-20261111]
 permissions:
   contents: read
 jobs:
-  formatting:
+  java-attributes:
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 70
+    defaults:
+      run:
+        working-directory: candidate
+    env:
+      CARGO_INCREMENTAL: "0"
+      CARGO_BUILD_JOBS: "2"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+      CARGO_PROFILE_DEV_OPT_LEVEL: "0"
+      CARGO_TERM_COLOR: never
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          repository: Afloat16/craft-anything
-          ref: 825c87b994a93491ec1a0ac8590828d8775ca14a
+          path: validation
           persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: Afloat16/craft-anything
+          ref: 44bf041627784d278917b1ef0e9aa3cd1332331b
+          path: candidate
           fetch-depth: 2
-      - name: Install the CI formatter
+          persist-credentials: false
+      - name: Compile Java and independently inspect attribute framing with the JVM
         run: |
-          rustup toolchain install 1.99.0 --profile minimal --component rustfmt
+          python3 "$GITHUB_WORKSPACE/validation/.github/validation/java_attributes_native.py" --out "$RUNNER_TEMP/java-attributes"
+          echo "JAVA_ATTRIBUTE_FIXTURES=$RUNNER_TEMP/java-attributes" >> "$GITHUB_ENV"
+      - name: Install exact CI Rust with formatting, Clippy and WebAssembly support
+        run: |
+          rustup toolchain install 1.99.0 --profile minimal --component rustfmt --component clippy --target wasm32-unknown-unknown
           rustup default 1.99.0
-      - name: Produce the formatter delta for review
+          rustc --version
+      - name: Check checked-in formatting before compilation
+        run: cargo fmt --all -- --check
+      - name: Compare original and fixed production code on all regression and native cases
         run: |
-          cargo fmt --all
-          git diff --stat
-          git diff -- crates/formats/src/java_class.rs crates/formats/tests/java_attribute_framing.rs crates/engine/src/tools/java_tools.rs crates/engine/tests/java_attribute_completeness.rs
-          java -version
-          javac -version
+          git fetch --no-tags --depth=1 origin 3ce1ce9f52077a53811be8a0309fdbe85b16b417
+          cp "$GITHUB_WORKSPACE/validation/.github/validation/java_attribute_native_validation.rs" crates/engine/tests/java_attribute_native_validation.rs
+          python3 "$GITHUB_WORKSPACE/validation/.github/validation/java_attributes_compare.py"
+          rm crates/engine/tests/java_attribute_native_validation.rs
+          git diff --exit-code
+      - name: Run complete engine, formats and testkit suites
+        run: cargo --config 'profile.dev.package."*".opt-level=0' test --locked --no-fail-fast -p craft-anything-engine -p craft-anything-formats -p craft-anything-testkit
+      - name: Run strict all-target Clippy
+        run: cargo --config 'profile.dev.package."*".opt-level=0' clippy --locked -p craft-anything-engine -p craft-anything-formats -p craft-anything-testkit --all-targets -- -D warnings
+      - name: Check repository layer, lock and secret contracts
+        run: |
+          cargo --config 'profile.dev.package."*".opt-level=0' xtask layers
+          cargo --config 'profile.dev.package."*".opt-level=0' xtask locks
+          cargo --config 'profile.dev.package."*".opt-level=0' xtask secrets
+      - name: Check the complete five-crate WebAssembly gate
+        run: cargo --config 'profile.dev.package."*".opt-level=0' xtask wasm
+      - name: Check patch whitespace and clean checkout
+        run: |
+          git diff --check 3ce1ce9f52077a53811be8a0309fdbe85b16b417 HEAD
+          git diff --exit-code
+          test -z "$(git ls-files --others --exclude-standard)"

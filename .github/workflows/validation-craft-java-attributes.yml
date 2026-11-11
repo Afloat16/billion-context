@@ -1,0 +1,28 @@
+name: Craft Java attribute formatting preparation
+on:
+  push:
+    branches: [validation/craft-java-attribute-framing-20261111]
+permissions:
+  contents: read
+jobs:
+  formatting:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: Afloat16/craft-anything
+          ref: 825c87b994a93491ec1a0ac8590828d8775ca14a
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Install the CI formatter
+        run: |
+          rustup toolchain install 1.99.0 --profile minimal --component rustfmt
+          rustup default 1.99.0
+      - name: Produce the formatter delta for review
+        run: |
+          cargo fmt --all
+          git diff --stat
+          git diff -- crates/formats/src/java_class.rs crates/formats/tests/java_attribute_framing.rs crates/engine/src/tools/java_tools.rs crates/engine/tests/java_attribute_completeness.rs
+          java -version
+          javac -version

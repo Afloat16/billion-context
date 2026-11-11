@@ -18,8 +18,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: Afloat16/craft-anything
-          ref: de266966a9eeb1de8f22cf4f2cd5b5bcff9b13e7
-          fetch-depth: 2
+          ref: c87a299d2765c54505e787584cd17f7f75fe5794
+          fetch-depth: 3
           path: base
           persist-credentials: false
       - name: Install pinned Rust tools
@@ -34,6 +34,7 @@ jobs:
         with:
           workspaces: base -> target
           shared-key: craft-elf-siginfo-1.99
+          cache-on-failure: true
       - name: Format the three proposed source and test files
         working-directory: base
         run: |
@@ -73,5 +74,5 @@ jobs:
               sha=hashlib.sha256(content.encode()).hexdigest()
               hashes[path]=sha
               print("ELF_FORMATTED_FILE="+json.dumps({"path":path,"content":content,"sha256":sha}))
-          print("ELF_VALIDATED_IDENTITY="+json.dumps({"candidate":"de266966a9eeb1de8f22cf4f2cd5b5bcff9b13e7","files":hashes,"lock_sha256":hashlib.sha256((root/"Cargo.lock").read_bytes()).hexdigest(),"format_changed":sorted(changed)}))
+          print("ELF_VALIDATED_IDENTITY="+json.dumps({"candidate":"c87a299d2765c54505e787584cd17f7f75fe5794","files":hashes,"lock_sha256":hashlib.sha256((root/"Cargo.lock").read_bytes()).hexdigest(),"format_changed":sorted(changed)}))
           PY

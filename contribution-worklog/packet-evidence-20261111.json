@@ -55,5 +55,18 @@
       "Wasm"
     ]
   },
-  "publication": "Do not retry the previously rejected craft PR permission action; prepare a complete prefilled compare URL after required validation."
+  "publication": "Do not retry the previously rejected craft PR permission action; prepare a complete prefilled compare URL after required validation.",
+  "validation_runs": [
+    {
+      "id": 43054523894,
+      "url": "https://github.com/Afloat16/billion-context/actions/runs/43054523894",
+      "head": "b171ee291d98b86c137e2e02093fc181bd96db52",
+      "conclusion": "failure",
+      "passed": [
+        "Rust1.99 setup",
+        "cargo fmt --all -- --check"
+      ],
+      "blocker": "Official signed Ubuntu package setup could not resolve archive.ubuntu.com; native fixtures, regressions and remaining gates did not run."
+    }
+  ]
 }

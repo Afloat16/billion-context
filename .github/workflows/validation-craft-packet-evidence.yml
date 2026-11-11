@@ -37,21 +37,10 @@ jobs:
           rustc --version
       - name: Check formatting before compilation
         run: cargo fmt --all -- --check
-      - name: Install Wireshark file tools from signed Ubuntu packages
-        run: |
-          if ! command -v tshark || ! command -v text2pcap || ! command -v editcap; then
-            printf '%s\n' 'Types: deb' 'URIs: https://archive.ubuntu.com/ubuntu' 'Suites: noble noble-updates noble-security' 'Components: main universe' 'Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg' > "$RUNNER_TEMP/packet-ubuntu.sources"
-            sudo apt-get -o Dir::Etc::sourcelist="$RUNNER_TEMP/packet-ubuntu.sources" -o Dir::Etc::sourceparts="-" update
-            sudo env DEBIAN_FRONTEND=noninteractive apt-get -o Dir::Etc::sourcelist="$RUNNER_TEMP/packet-ubuntu.sources" -o Dir::Etc::sourceparts="-" install --yes --no-install-recommends tshark wireshark-common
-          fi
-      - name: Generate and independently read native capture fixtures
-        run: |
-          echo "PACKET_VALIDATION_FIXTURES=$RUNNER_TEMP/packet-fixtures" >> "$GITHUB_ENV"
-          PACKET_VALIDATION_FIXTURES="$RUNNER_TEMP/packet-fixtures" python3 "$GITHUB_WORKSPACE/validation/.github/validation/packet_native_fixtures.py"
-      - name: Compare original and fixed code with actual limits and native files
+      - name: Compare original and fixed code with actual packet and process limits
         run: |
           git fetch --no-tags --depth=1 origin adeddc9149b97c21e595e743c9875d84e805eece
-          python3 "$GITHUB_WORKSPACE/validation/.github/validation/packet_compare.py"
+          python3 "$GITHUB_WORKSPACE/validation/.github/validation/packet_compare.py" core
       - name: Run complete engine, formats and testkit suites
         run: cargo --config 'profile.dev.package."*".opt-level=0' test --locked --no-fail-fast -p craft-anything-engine -p craft-anything-formats -p craft-anything-testkit
       - name: Run strict all-target Clippy

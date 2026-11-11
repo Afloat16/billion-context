@@ -1,0 +1,65 @@
+name: Claude owner goals restoration control
+on:
+  push:
+    branches: [validation/claude-owner-goals-restoration-20261111]
+permissions:
+  contents: read
+jobs:
+  paired-restoration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      TZ: UTC
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: Afloat16/claude-mem
+          ref: a4e1c4d982a738b0493ccc69bab5067403397032
+          path: before
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: Afloat16/claude-mem
+          ref: 367cfbcdf4a1b911126b51ac7253eaaf09ae77c3
+          path: after
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - name: Install unchanged repository dependencies once
+        working-directory: before
+        run: npm install --no-audit --no-fund
+      - name: Use the identical test and installed dependencies
+        run: |
+          cp after/tests/work-view/owner-goals-batching.test.ts before/tests/work-view/owner-goals-batching.test.ts
+          ln -s ../before/node_modules after/node_modules
+      - name: Confirm final head differs from the fully tested head only in documentation
+        working-directory: after
+        run: |
+          python3 - <<'PY'
+          import subprocess
+          paths = subprocess.check_output(["git", "diff", "--name-only", "4d4f84b9a036b015301628f6415f48ce0e542efc", "HEAD"], text=True).splitlines()
+          print("Changes after complete Linux/Windows validation:", paths)
+          assert paths == ["docs/architecture/owner-goals-refresh.md"]
+          subprocess.run(["git", "diff", "--check", "4d4f84b9a036b015301628f6415f48ce0e542efc", "HEAD"], check=True)
+          PY
+      - name: Reproduce the actual missing restored calls on the earlier implementation
+        working-directory: before
+        run: |
+          python3 - <<'PY'
+          import subprocess
+          result = subprocess.run(["bun", "test", "tests/work-view/owner-goals-batching.test.ts", "-t", "processes restored source turns", "--timeout", "120000"], text=True, capture_output=True)
+          output = result.stdout + result.stderr
+          print(output)
+          assert result.returncode != 0, "Earlier implementation unexpectedly passed"
+          assert "+ []" in output and "expect(restored).toEqual(first)" in output, "Expected missing restored-source calls"
+          assert "1 fail" in output and "Cannot find module" not in output and "SyntaxError" not in output
+          print("Confirmed: the earlier implementation made zero calls for the 11 restored source turns.")
+          PY
+      - name: Run the identical three-phase restoration regression on the final head
+        working-directory: after
+        run: bun test tests/work-view/owner-goals-batching.test.ts -t 'processes restored source turns' --timeout 120000

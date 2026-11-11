@@ -1,4 +1,4 @@
-name: Frida spawned-argument full validation
+name: Frida spawned-argument final-document validation
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
 jobs:
   frida-spawn:
     runs-on: ubuntu-24.04
-    timeout-minutes: 75
+    timeout-minutes: 60
     env:
       CARGO_INCREMENTAL: "0"
       CARGO_BUILD_JOBS: "2"
@@ -23,52 +23,34 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: Afloat16/craft-anything
-          ref: e245262ceb0bf33efe663371d64566ced83b070f
+          ref: 79c1af0d0afccd76b68422e415c85b71db019ce2
           fetch-depth: 0
           persist-credentials: false
       - name: Install Rust
         run: |
-          rustup toolchain install 1.99.0 --profile minimal --component rustfmt --component clippy --target wasm32-unknown-unknown
+          rustup toolchain install 1.99.0 --profile minimal --component rustfmt
           rustup default 1.99.0
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
         with:
           key: craft-frida-spawn-arguments-full-v2
           save-if: true
           cache-on-failure: true
-      - name: Check formatting
-        run: cargo fmt --all -- --check
-      - name: Reproduce original argument interpretation errors
+      - name: Verify unchanged implementation, tests and dependencies
         run: |
           python3 - <<'PY'
-          import pathlib
           import subprocess
-          path = pathlib.Path("crates/engines/src/frida.rs")
-          fixed = path.read_bytes()
-          failures = {
-              "spawned_program_flags_are_not_frida_options",
-              "a_literal_separator_is_kept_after_the_cli_boundary",
-              "empty_unicode_and_whitespace_arguments_are_preserved",
-              "options_file_arguments_are_refused_before_launch",
-              "similar_option_names_and_joined_short_forms_are_not_refused",
-          }
-          try:
-              path.write_bytes(subprocess.check_output(["git", "show", "3ce1ce9f52077a53811be8a0309fdbe85b16b417:" + path.as_posix()]))
-              result = subprocess.run(
-                  ["cargo", "--config", 'profile.dev.package."*".opt-level=0', "test", "--locked",
-                   "-p", "craft-anything-engines", "--test", "frida_spawn_arguments", "--", "--nocapture"],
-                  text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-              )
-              print(result.stdout, end="")
-              if result.returncode == 0 or "test result: FAILED. 3 passed; 5 failed;" not in result.stdout:
-                  raise SystemExit("Expected five argument-boundary regressions and three controls on the unchanged adapter")
-              listed = result.stdout.rsplit("failures:", 1)[-1].split("test result:", 1)[0]
-              actual = {line.strip() for line in listed.splitlines() if line.strip()}
-              assert actual == failures, actual
-          finally:
-              path.write_bytes(fixed)
+          base = "e245262ceb0bf33efe663371d64566ced83b070f"
+          changed = set(subprocess.check_output(["git", "diff", "--name-only", base, "HEAD"], text=True).splitlines())
+          assert changed == {"docs/ROADMAP.md", "docs/STATUS.md"}, changed
+          subprocess.run(["git", "diff", "--exit-code", base, "HEAD", "--", ".", ":(exclude)docs/ROADMAP.md", ":(exclude)docs/STATUS.md"], check=True)
+          print("All implementation, test and dependency files are identical to the fully validated source.")
           PY
-      - name: Run the complete external-engine suite
-        run: cargo --config 'profile.dev.package."*".opt-level=0' test --locked -p craft-anything-engines
+      - name: Validate final documents
+        run: |
+          cargo fmt --all -- --check
+          cargo --config 'profile.dev.package."*".opt-level=0' xtask secrets
+          git diff --check e245262ceb0bf33efe663371d64566ced83b070f HEAD
+          git diff --exit-code
       - name: Install fixed native Frida tools
         run: |
           python3 -m venv "$RUNNER_TEMP/frida-oracle"
@@ -157,6 +139,7 @@ jobs:
                   ("unknown", ["--target-only"], False),
                   ("separator", ["--", "-q", "trailing"], False),
                   ("similar_long_option", ["--options-file-not", "value"], False),
+                  ("joined_short_option", ["-Ojoined", "--options-files", "value=--options-file"], False),
                   ("short_options_file", ["-O", missing], True),
                   ("long_options_file", ["--options-file", missing], True),
                   ("equals_options_file", ["--options-file=" + missing], True),
@@ -205,17 +188,7 @@ jobs:
           PY
           EXPECT_FIXED=1 "$RUNNER_TEMP/frida-oracle/bin/python" /tmp/validation_frida_argv.py
           git diff --exit-code
-      - name: Run strict all-target Clippy
-        run: cargo --config 'profile.dev.package."*".opt-level=0' clippy --locked -p craft-anything-engines --all-targets -- -D warnings
-      - name: Check repository contracts
-        run: |
-          cargo --config 'profile.dev.package."*".opt-level=0' xtask layers
-          cargo --config 'profile.dev.package."*".opt-level=0' xtask locks
-          cargo --config 'profile.dev.package."*".opt-level=0' xtask secrets
-      - name: Check all WebAssembly layers
-        run: cargo --config 'profile.dev.package."*".opt-level=0' xtask wasm
-      - name: Require formatting and an unchanged source tree
+      - name: Require a clean final tree
         run: |
           cargo fmt --all -- --check
-          git diff --check
-          git diff --exit-code
+          test -z "$(git status --porcelain)"

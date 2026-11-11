@@ -1,0 +1,244 @@
+{
+  "format": "craft-ready-contributions",
+  "version": 1,
+  "records": [
+    {
+      "repository": "storytold/craft-anything",
+      "base": "main",
+      "base_sha": "3ce1ce9f52077a53811be8a0309fdbe85b16b417",
+      "branch": "bugfix/r3.12-bzip2-concatenated-members-20261111",
+      "claim": "a22846cfda2551392c03c3bfbbdc046fd64d3ba2",
+      "head": "c16fae5391484a753a3a5bd13697c0dc6efb4967",
+      "topic": "恢复并校验全部 bzip2 拼接成员，统一限制总输出并保留固件尾随数据兼容",
+      "title": "Recover every concatenated bzip2 member within one output budget (R3.12)",
+      "body": "## Problem\n\nThe existing bzip2 decoder returns the first member of a concatenated stream. Recovery can silently omit later content, accept a damaged later member, or apply the output budget only to the first member. ZIP method 12 uses the same public decoder.\n\n## Change\n\n- Decode each member in order with one shared bounded output sink, including empty members.\n- Check each member's block and combined checksums and reject unfinished members instead of returning the earlier valid prefix.\n- Keep firmware-carving compatibility with non-member bytes after a complete stream. Invalid initial input and a truncated next-member header remain errors.\n- Use the safe `bzip2::bufread::BzDecoder` interface, whose returned input exposes the exact remaining bytes. The previous `bzip2-rs` interface did not expose unused buffered input.\n- Resolve `bzip2 0.6.1` with its default pure Rust `libbz2-rs-sys 0.2.6` backend. No C backend is enabled. Cargo adds only these two packages and removes the old decoder and its now-unused `tinyvec` leaf dependency; existing package versions do not change.\n\nThe public result/error types and output limit are unchanged. Concatenated streams are part of the [bzip2 format's supported behavior](https://sourceware.org/bzip2/manual/manual.html).\n\n## Validation\n\nThe [original-production comparison](https://github.com/Afloat16/billion-context/actions/runs/43062392709/job/130668146515) runs native `bzip2 -dc` 1.0.8 on 34 independently generated inputs and compares complete output bytes or error results, including the caller's total output budget. Original production at `3ce1ce9` disagrees in **17 cases**.\n\nThe [fixed preparation and complete gates](https://github.com/Afloat16/billion-context/actions/runs/43063316908/job/130671455264) regenerate the exact same 34 inputs, assert their matrix SHA-256, and find **zero differences**. Cases include multiple and empty members, Unicode/binary data, compression levels 1 and 9, a 225,900-byte multi-block payload, block/combined checksum damage in later members, incomplete headers and bodies, trailing non-member bytes, and exact/exceeded total budgets.\n\nTen checked-in regression groups cover those boundaries and complete ZIP method-12 recovery, including the ZIP member's own CRC and output budget. They give **6 failures and 4 passing controls** on the unchanged production code, and **10 passing groups** after the change. Every nonempty incomplete prefix of a later member is checked.\n\nThe complete formats and engine suites pass **2,396 tests, 0 failures, 17 existing ignored tests** across 227 test/doc targets. Rust 1.99 formatting, strict all-target Clippy for both crates, layer/lock/secret checks, and all five L0-L2 WebAssembly builds pass.\n\n[Published-source verification](https://github.com/Afloat16/billion-context/actions/runs/43066011812/job/130681025957) checks final head `c16fae5391484a753a3a5bd13697c0dc6efb4967` against the exact source, regression file, manifest and Cargo-generated lockfile from the successful preparation job. It verifies the public claim parent, the seven-file scope, formatting and repository contracts. The final documentation does not require a duplicate full test run.\n\n## Validation history and scope\n\nThe first comparison used Python's `bz2.decompress`, which can swallow an error in a later member as trailing data. The final integrity oracle is the actual native CLI exit status, with complete-byte comparisons; this lesson is recorded in pitfalls. Python 3.12.3 generates the compressed inputs.\n\nThe initial native-comparison run linked above completed the negative controls but failed a validation-only dependency allowlist because it had not accounted for the removed decoder's unused `tinyvec` dependency. The subsequent gate checks the exact two removals and two additions; no product assertion was weakened.\n\nChecked the decoder history and all-state bzip2/bz2 PR searches. #1374 added ZIP bzip2/XZ extraction through the existing decoder; this fixes complete bzip2 member recovery itself. No native Windows run, external firmware corpus, or performance improvement is claimed. The public R3.12 claim preceded implementation.\n",
+      "state": "ready_pending_pr",
+      "merged": false,
+      "actual_pr": null,
+      "validation": {
+        "full": {
+          "targets": 227,
+          "pass": 2396,
+          "fail": 0,
+          "ignored": 17
+        },
+        "native_baseline": {
+          "cases": 34,
+          "mismatches": [
+            {
+              "name": "two-members",
+              "expected": "ok",
+              "actual": "ok",
+              "expected_bytes": 41,
+              "actual_bytes": 20,
+              "stderr": null
+            },
+            {
+              "name": "three-members",
+              "expected": "ok",
+              "actual": "ok",
+              "expected_bytes": 1321,
+              "actual_bytes": 20,
+              "stderr": null
+            },
+            {
+              "name": "empty-first",
+              "expected": "ok",
+              "actual": "ok",
+              "expected_bytes": 20,
+              "actual_bytes": 0,
+              "stderr": null
+            },
+            {
+              "name": "empty-middle",
+              "expected": "ok",
+              "actual": "ok",
+              "expected_bytes": 41,
+              "actual_bytes": 20,
+              "stderr": null
+            },
+            {
+              "name": "multiblock-then-text",
+              "expected": "ok",
+              "actual": "ok",
+              "expected_bytes": 225920,
+              "actual_bytes": 225900,
+              "stderr": null
+            },
+            {
+              "name": "text-then-multiblock",
+              "expected": "ok",
+              "actual": "ok",
+              "expected_bytes": 225920,
+              "actual_bytes": 20,
+              "stderr": null
+            },
+            {
+              "name": "bad-later-block-crc",
+              "expected": "corrupt",
+              "actual": "ok",
+              "expected_bytes": 0,
+              "actual_bytes": 20,
+              "stderr": null
+            },
+            {
+              "name": "bad-later-combined-crc",
+              "expected": "corrupt",
+              "actual": "ok",
+              "expected_bytes": 0,
+              "actual_bytes": 20,
+              "stderr": null
+            },
+            {
+              "name": "truncated-later-stream",
+              "expected": "corrupt",
+              "actual": "ok",
+              "expected_bytes": 0,
+              "actual_bytes": 20,
+              "stderr": null
+            },
+            {
+              "name": "truncated-later-header",
+              "expected": "corrupt",
+              "actual": "ok",
+              "expected_bytes": 0,
+              "actual_bytes": 20,
+              "stderr": null
+            },
+            {
+              "name": "exact-combined-budget",
+              "expected": "ok",
+              "actual": "ok",
+              "expected_bytes": 41,
+              "actual_bytes": 20,
+              "stderr": null
+            },
+            {
+              "name": "budget-after-first",
+              "expected": "too_large",
+              "actual": "ok",
+              "expected_bytes": 0,
+              "actual_bytes": 20,
+              "stderr": null
+            },
+            {
+              "name": "empty-first-zero-budget",
+              "expected": "too_large",
+              "actual": "ok",
+              "expected_bytes": 0,
+              "actual_bytes": 0,
+              "stderr": null
+            },
+            {
+              "name": "concat-trailing-garbage",
+              "expected": "ok",
+              "actual": "ok",
+              "expected_bytes": 41,
+              "actual_bytes": 20,
+              "stderr": null
+            },
+            {
+              "name": "bad-later-empty-crc",
+              "expected": "corrupt",
+              "actual": "ok",
+              "expected_bytes": 0,
+              "actual_bytes": 20,
+              "stderr": null
+            },
+            {
+              "name": "one-byte-header",
+              "expected": "corrupt",
+              "actual": "ok",
+              "expected_bytes": 0,
+              "actual_bytes": 20,
+              "stderr": null
+            },
+            {
+              "name": "two-byte-header",
+              "expected": "corrupt",
+              "actual": "ok",
+              "expected_bytes": 0,
+              "actual_bytes": 20,
+              "stderr": null
+            }
+          ],
+          "inputs_sha256": "c79ff9746571d1a1a59cda8ca358e1ec3d45c5ef1d6390546ce489816901d9d6"
+        },
+        "native_fixed": {
+          "cases": 34,
+          "mismatches": [],
+          "inputs_sha256": "c79ff9746571d1a1a59cda8ca358e1ec3d45c5ef1d6390546ce489816901d9d6"
+        },
+        "dependencies": {
+          "removed": [
+            [
+              "bzip2-rs",
+              "0.1.2",
+              "registry+https://github.com/rust-lang/crates.io-index"
+            ],
+            [
+              "tinyvec",
+              "1.13.3",
+              "registry+https://github.com/rust-lang/crates.io-index"
+            ]
+          ],
+          "added": [
+            [
+              "bzip2",
+              "0.6.1",
+              "registry+https://github.com/rust-lang/crates.io-index"
+            ],
+            [
+              "libbz2-rs-sys",
+              "0.2.6",
+              "registry+https://github.com/rust-lang/crates.io-index"
+            ]
+          ],
+          "active_native_c_backend": false
+        },
+        "lock_sha256": "1b44bef93adaeafb5970af0b17ace3a794db3950899122d380c6712fad4c12f1",
+        "final_identity": {
+          "validated_run": 43063316908,
+          "validated_job": 130671455264,
+          "head": "c16fae5391484a753a3a5bd13697c0dc6efb4967",
+          "lock_sha256": "1b44bef93adaeafb5970af0b17ace3a794db3950899122d380c6712fad4c12f1",
+          "changed_files": [
+            "Cargo.lock",
+            "crates/formats/Cargo.toml",
+            "crates/formats/src/decompress.rs",
+            "crates/formats/tests/bzip2_members.rs",
+            "docs/ROADMAP.md",
+            "docs/STATUS.md",
+            "docs/pitfalls.md"
+          ]
+        },
+        "environment": {
+          "python": "3.12.3",
+          "native_cli": "/usr/bin/bzip2"
+        },
+        "native_cli_version": "bzip2 1.0.8",
+        "permanent_regressions": {
+          "baseline": {
+            "pass": 4,
+            "fail": 6
+          },
+          "fixed": {
+            "pass": 10,
+            "fail": 0
+          }
+        },
+        "retained_setup_failures": [
+          {
+            "run": 43062392709,
+            "job": 130668146515,
+            "reason": "Validation dependency allowlist omitted the removed decoder's unused tinyvec leaf dependency; native baseline and test negative controls completed first."
+          }
+        ]
+      },
+      "validation_url": "https://github.com/Afloat16/billion-context/actions/runs/43063316908/job/130671455264",
+      "final_validation_url": "https://github.com/Afloat16/billion-context/actions/runs/43066011812/job/130681025957",
+      "baseline_validation_url": "https://github.com/Afloat16/billion-context/actions/runs/43062392709/job/130668146515",
+      "url": "https://github.com/storytold/craft-anything/compare/main...Afloat16:craft-anything:bugfix/r3.12-bzip2-concatenated-members-20261111?expand=1&title=Recover%20every%20concatenated%20bzip2%20member%20within%20one%20output%20budget%20(R3.12)&body=%23%23%20Problem%0A%0AThe%20existing%20bzip2%20decoder%20returns%20the%20first%20member%20of%20a%20concatenated%20stream.%20Recovery%20can%20silently%20omit%20later%20content%2C%20accept%20a%20damaged%20later%20member%2C%20or%20apply%20the%20output%20budget%20only%20to%20the%20first%20member.%20ZIP%20method%2012%20uses%20the%20same%20public%20decoder.%0A%0A%23%23%20Change%0A%0A-%20Decode%20each%20member%20in%20order%20with%20one%20shared%20bounded%20output%20sink%2C%20including%20empty%20members.%0A-%20Check%20each%20member's%20block%20and%20combined%20checksums%20and%20reject%20unfinished%20members%20instead%20of%20returning%20the%20earlier%20valid%20prefix.%0A-%20Keep%20firmware-carving%20compatibility%20with%20non-member%20bytes%20after%20a%20complete%20stream.%20Invalid%20initial%20input%20and%20a%20truncated%20next-member%20header%20remain%20errors.%0A-%20Use%20the%20safe%20%60bzip2%3A%3Abufread%3A%3ABzDecoder%60%20interface%2C%20whose%20returned%20input%20exposes%20the%20exact%20remaining%20bytes.%20The%20previous%20%60bzip2-rs%60%20interface%20did%20not%20expose%20unused%20buffered%20input.%0A-%20Resolve%20%60bzip2%200.6.1%60%20with%20its%20default%20pure%20Rust%20%60libbz2-rs-sys%200.2.6%60%20backend.%20No%20C%20backend%20is%20enabled.%20Cargo%20adds%20only%20these%20two%20packages%20and%20removes%20the%20old%20decoder%20and%20its%20now-unused%20%60tinyvec%60%20leaf%20dependency%3B%20existing%20package%20versions%20do%20not%20change.%0A%0AThe%20public%20result%2Ferror%20types%20and%20output%20limit%20are%20unchanged.%20Concatenated%20streams%20are%20part%20of%20the%20%5Bbzip2%20format's%20supported%20behavior%5D(https%3A%2F%2Fsourceware.org%2Fbzip2%2Fmanual%2Fmanual.html).%0A%0A%23%23%20Validation%0A%0AThe%20%5Boriginal-production%20comparison%5D(https%3A%2F%2Fgithub.com%2FAfloat16%2Fbillion-context%2Factions%2Fruns%2F43062392709%2Fjob%2F130668146515)%20runs%20native%20%60bzip2%20-dc%60%201.0.8%20on%2034%20independently%20generated%20inputs%20and%20compares%20complete%20output%20bytes%20or%20error%20results%2C%20including%20the%20caller's%20total%20output%20budget.%20Original%20production%20at%20%603ce1ce9%60%20disagrees%20in%20**17%20cases**.%0A%0AThe%20%5Bfixed%20preparation%20and%20complete%20gates%5D(https%3A%2F%2Fgithub.com%2FAfloat16%2Fbillion-context%2Factions%2Fruns%2F43063316908%2Fjob%2F130671455264)%20regenerate%20the%20exact%20same%2034%20inputs%2C%20assert%20their%20matrix%20SHA-256%2C%20and%20find%20**zero%20differences**.%20Cases%20include%20multiple%20and%20empty%20members%2C%20Unicode%2Fbinary%20data%2C%20compression%20levels%201%20and%209%2C%20a%20225%2C900-byte%20multi-block%20payload%2C%20block%2Fcombined%20checksum%20damage%20in%20later%20members%2C%20incomplete%20headers%20and%20bodies%2C%20trailing%20non-member%20bytes%2C%20and%20exact%2Fexceeded%20total%20budgets.%0A%0ATen%20checked-in%20regression%20groups%20cover%20those%20boundaries%20and%20complete%20ZIP%20method-12%20recovery%2C%20including%20the%20ZIP%20member's%20own%20CRC%20and%20output%20budget.%20They%20give%20**6%20failures%20and%204%20passing%20controls**%20on%20the%20unchanged%20production%20code%2C%20and%20**10%20passing%20groups**%20after%20the%20change.%20Every%20nonempty%20incomplete%20prefix%20of%20a%20later%20member%20is%20checked.%0A%0AThe%20complete%20formats%20and%20engine%20suites%20pass%20**2%2C396%20tests%2C%200%20failures%2C%2017%20existing%20ignored%20tests**%20across%20227%20test%2Fdoc%20targets.%20Rust%201.99%20formatting%2C%20strict%20all-target%20Clippy%20for%20both%20crates%2C%20layer%2Flock%2Fsecret%20checks%2C%20and%20all%20five%20L0-L2%20WebAssembly%20builds%20pass.%0A%0A%5BPublished-source%20verification%5D(https%3A%2F%2Fgithub.com%2FAfloat16%2Fbillion-context%2Factions%2Fruns%2F43066011812%2Fjob%2F130681025957)%20checks%20final%20head%20%60c16fae5391484a753a3a5bd13697c0dc6efb4967%60%20against%20the%20exact%20source%2C%20regression%20file%2C%20manifest%20and%20Cargo-generated%20lockfile%20from%20the%20successful%20preparation%20job.%20It%20verifies%20the%20public%20claim%20parent%2C%20the%20seven-file%20scope%2C%20formatting%20and%20repository%20contracts.%20The%20final%20documentation%20does%20not%20require%20a%20duplicate%20full%20test%20run.%0A%0A%23%23%20Validation%20history%20and%20scope%0A%0AThe%20first%20comparison%20used%20Python's%20%60bz2.decompress%60%2C%20which%20can%20swallow%20an%20error%20in%20a%20later%20member%20as%20trailing%20data.%20The%20final%20integrity%20oracle%20is%20the%20actual%20native%20CLI%20exit%20status%2C%20with%20complete-byte%20comparisons%3B%20this%20lesson%20is%20recorded%20in%20pitfalls.%20Python%203.12.3%20generates%20the%20compressed%20inputs.%0A%0AThe%20initial%20native-comparison%20run%20linked%20above%20completed%20the%20negative%20controls%20but%20failed%20a%20validation-only%20dependency%20allowlist%20because%20it%20had%20not%20accounted%20for%20the%20removed%20decoder's%20unused%20%60tinyvec%60%20dependency.%20The%20subsequent%20gate%20checks%20the%20exact%20two%20removals%20and%20two%20additions%3B%20no%20product%20assertion%20was%20weakened.%0A%0AChecked%20the%20decoder%20history%20and%20all-state%20bzip2%2Fbz2%20PR%20searches.%20%231374%20added%20ZIP%20bzip2%2FXZ%20extraction%20through%20the%20existing%20decoder%3B%20this%20fixes%20complete%20bzip2%20member%20recovery%20itself.%20No%20native%20Windows%20run%2C%20external%20firmware%20corpus%2C%20or%20performance%20improvement%20is%20claimed.%20The%20public%20R3.12%20claim%20preceded%20implementation.%0A"
+    }
+  ]
+}

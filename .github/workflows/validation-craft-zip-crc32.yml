@@ -1,0 +1,82 @@
+name: Craft ZIP CRC32 compatibility and throughput
+on:
+  push:
+    branches: [validation/craft-zip-crc32-throughput-20261111]
+permissions:
+  contents: read
+jobs:
+  formats:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: candidate
+    env:
+      CARGO_INCREMENTAL: "0"
+      CARGO_BUILD_JOBS: "2"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+      CARGO_PROFILE_DEV_OPT_LEVEL: "0"
+      CARGO_TERM_COLOR: never
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: Afloat16/craft-anything
+          ref: 29eae51d4391e18f315c9f9fc3b86e4988f9b9a6
+          path: candidate
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Install CI Rust, formatting, Clippy and WebAssembly support
+        run: |
+          rustup toolchain install 1.99.0 --profile minimal --component rustfmt --component clippy --target wasm32-unknown-unknown
+          rustup default 1.99.0
+          rustc --version
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Run complete formats crate
+        run: cargo --config 'profile.dev.package."*".opt-level=0' test --locked -p craft-anything-formats
+      - name: Run strict formats Clippy
+        run: cargo --config 'profile.dev.package."*".opt-level=0' clippy --locked -p craft-anything-formats --all-targets -- -D warnings
+      - name: Check layers, locks and secrets
+        run: |
+          cargo --config 'profile.dev.package."*".opt-level=0' xtask layers
+          cargo --config 'profile.dev.package."*".opt-level=0' xtask locks
+          cargo --config 'profile.dev.package."*".opt-level=0' xtask secrets
+      - name: Check complete WebAssembly layer gate
+        run: cargo --config 'profile.dev.package."*".opt-level=0' xtask wasm
+      - name: Verify exact source and patch whitespace
+        run: |
+          git fetch --no-tags --depth=1 origin 7116cc6cb486ada87497de2568c6b6db5a2ea783
+          git diff --check 7116cc6cb486ada87497de2568c6b6db5a2ea783 HEAD
+          git diff --exit-code
+  stored-zip-throughput:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      CARGO_INCREMENTAL: "0"
+      CARGO_BUILD_JOBS: "2"
+      CARGO_TERM_COLOR: never
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          path: validation
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: storytold/craft-anything
+          ref: 7116cc6cb486ada87497de2568c6b6db5a2ea783
+          path: baseline
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: Afloat16/craft-anything
+          ref: 29eae51d4391e18f315c9f9fc3b86e4988f9b9a6
+          path: candidate
+          persist-credentials: false
+      - name: Install the identical release toolchain for both revisions
+        run: |
+          rustup toolchain install 1.99.0 --profile minimal
+          rustup default 1.99.0
+          rustc -vV
+      - name: Compare zlib and byte-identical stored ZIP reads across five processes per revision
+        run: python3 "$GITHUB_WORKSPACE/validation/.github/validation/zip_crc32.py"

@@ -1,110 +1,66 @@
-name: Verify every Zstandard frame checksum
+name: Verify Zstandard checksum integration with current main
 on:
   push:
     branches: ["validation/craft-zstd-checksums-20261111"]
 permissions:
   contents: read
 jobs:
-  negative:
-    if: ${{ false }}
+  final:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          path: validation
-          persist-credentials: false
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
           repository: Afloat16/craft-anything
-          ref: adeddc9149b97c21e595e743c9875d84e805eece
-          path: base
-          persist-credentials: false
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          repository: Afloat16/craft-anything
-          ref: 73826326c516b3f53b5e5997804cc38b0c2fd059
-          path: regression
-          persist-credentials: false
-      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
-        with:
-          python-version: "3.14.0"
-      - name: Install fixed Rust
-        run: rustup toolchain install 1.99.0 --profile minimal
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
-        with:
-          workspaces: base -> target
-          shared-key: craft-zstd-checksums-1.99
-      - name: Run unchanged-main regression controls
-        run: |
-          cp regression/crates/formats/tests/zstd_checksums.rs base/crates/formats/tests/zstd_checksums.rs
-          python3 - <<'PY'
-          import re, subprocess
-          r = subprocess.run(["cargo", "+1.99.0", "test", "--locked", "-p", "craft-anything-formats", "--test", "zstd_checksums", "--", "--nocapture"], cwd="base", text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=1200)
-          print(r.stdout)
-          assert r.returncode == 101, r.returncode
-          assert re.search(r"test result: FAILED\. 3 passed; 4 failed; 0 ignored", r.stdout)
-          subprocess.run(["git", "diff", "--exit-code"], cwd="base", check=True)
-          PY
-      - name: Compare the unchanged production decoder with libzstd
-        run: |
-          python3 validation/.github/validation/zstd_checksum_native.py
-          mkdir -p base/crates/formats/examples
-          cp validation/.github/validation/zstd_checksum_probe.rs base/crates/formats/examples/zstd_checksum_probe.rs
-          cd base
-          cargo +1.99.0 build --locked -p craft-anything-formats --example zstd_checksum_probe
-          cd ..
-          python3 validation/.github/validation/zstd_checksum_compare.py base/target/debug/examples/zstd_checksum_probe base
-  fixed:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 40
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          path: validation
-          persist-credentials: false
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          repository: Afloat16/craft-anything
-          ref: 73826326c516b3f53b5e5997804cc38b0c2fd059
-          fetch-depth: 2
+          ref: 4064429ecfaaeb01e67720f30d698ce7c08e7189
+          fetch-depth: 3
           path: fixed
           persist-credentials: false
-      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          python-version: "3.14.0"
+          repository: Afloat16/craft-anything
+          ref: 73826326c516b3f53b5e5997804cc38b0c2fd059
+          path: tested
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: storytold/craft-anything
+          ref: 86d047cbc5368ca595c83e045893fb39c7f3f7f8
+          path: upstream
+          persist-credentials: false
+      - name: Check exact tested files and complete upstream inheritance
+        run: |
+          python3 - <<'PY'
+          import hashlib, subprocess
+          from pathlib import Path
+          paths = ["crates/formats/src/decompress.rs", "crates/formats/Cargo.toml", "Cargo.lock", "crates/formats/tests/zstd_checksums.rs"]
+          for path in paths:
+              current = Path("fixed", path).read_bytes()
+              assert current == Path("tested", path).read_bytes(), path
+              print("TESTED_FILE", path, hashlib.sha256(current).hexdigest())
+          def entries(directory):
+              raw = subprocess.check_output(["git", "ls-tree", "-r", "-z", "HEAD"], cwd=directory)
+              return {row.split(b"\t", 1)[1]: row.split(b"\t", 1)[0] for row in raw.split(b"\0") if row}
+          fixed, upstream = entries("fixed"), entries("upstream")
+          changed = {p.decode() for p in fixed.keys() | upstream.keys() if fixed.get(p) != upstream.get(p)}
+          expected = set(paths + ["docs/ROADMAP.md", "docs/STATUS.md"])
+          assert changed == expected, sorted(changed)
+          assert hashlib.sha256(Path("fixed/Cargo.lock").read_bytes()).hexdigest() == "de1d47a73ed27284bddc4a0e96c85b928c01b41f30e79c55d84a8806567210bf"
+          assert subprocess.check_output(["git", "rev-parse", "HEAD"], cwd="fixed", text=True).strip() == "4064429ecfaaeb01e67720f30d698ce7c08e7189"
+          assert subprocess.check_output(["git", "rev-parse", "HEAD^^"], cwd="fixed", text=True).strip() == "86d047cbc5368ca595c83e045893fb39c7f3f7f8"
+          print("INTEGRATION_IDENTITY: 4 tested product/test/dependency files identical; 6 total PR files; every other upstream blob and mode preserved")
+          PY
       - name: Install fixed Rust
         run: rustup toolchain install 1.99.0 --profile minimal --component rustfmt --component clippy --target wasm32-unknown-unknown
-      - name: Use fixed compiler and verify generated lockfile
-        working-directory: fixed
-        run: |
-          rustup override set 1.99.0
-          git diff --exit-code 0c389675333fd9a5ab971a7d3693be5f6f884e4a HEAD -- crates/formats/src/decompress.rs crates/formats/Cargo.toml Cargo.lock
-          python3 - <<'PY'
-          import hashlib
-          from pathlib import Path
-          assert hashlib.sha256(Path("Cargo.lock").read_bytes()).hexdigest() == "de1d47a73ed27284bddc4a0e96c85b928c01b41f30e79c55d84a8806567210bf"
-          PY
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
         with:
           workspaces: fixed -> target
           shared-key: craft-zstd-checksums-1.99
-      - name: Check formatting
+      - name: Full formats tests with current upstream changes
         working-directory: fixed
         run: |
-          if ! cargo fmt --all --check; then
-            cargo fmt --all
-            python3 - <<'PY'
-          import json
-          from pathlib import Path
-          paths=["crates/formats/src/decompress.rs","crates/formats/tests/zstd_checksums.rs"]
-          print("FORMATTED_FILES_JSON="+json.dumps({p:Path(p).read_text() for p in paths}))
-          PY
-            exit 1
-          fi
-      - name: Complete formats tests and strict all-target Clippy
-        working-directory: fixed
-        run: |
+          rustup override set 1.99.0
+          cargo fmt --all --check
           cargo test --locked -p craft-anything-formats --no-fail-fast
           cargo clippy --locked -p craft-anything-formats --all-targets -- -D warnings
       - name: Repository contracts and all L0-L2 WebAssembly builds
@@ -114,18 +70,5 @@ jobs:
           cargo xtask locks
           cargo xtask secrets
           cargo xtask wasm
-      - name: Compare all native frames with the fixed production decoder
-        run: |
-          python3 validation/.github/validation/zstd_checksum_native.py
-          mkdir -p fixed/crates/formats/examples
-          cp validation/.github/validation/zstd_checksum_probe.rs fixed/crates/formats/examples/zstd_checksum_probe.rs
-          cd fixed
-          cargo build --locked -p craft-anything-formats --example zstd_checksum_probe
-          cd ..
-          python3 validation/.github/validation/zstd_checksum_compare.py fixed/target/debug/examples/zstd_checksum_probe fixed
-          rm fixed/crates/formats/examples/zstd_checksum_probe.rs
-      - name: Clean source and dependencies
-        working-directory: fixed
-        run: |
           git diff --check
           test -z "$(git status --porcelain)"

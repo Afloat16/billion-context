@@ -74,20 +74,19 @@ jobs:
           ref: ee91a2b82639b673b140442615f9cab0bb71a73d
           path: fixed
           persist-credentials: false
-      - name: Install native image producer
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: sigma-star/mtd-utils
+          ref: 31e990c56aba7584cde310685d663bb122f16003
+          path: mtd-source
+          persist-credentials: false
+      - name: Build the fixed native image producer
+        working-directory: mtd-source
         run: |
-          sources="$RUNNER_TEMP/jffs2-apt.list"
-          lists="$RUNNER_TEMP/jffs2-apt-lists"
-          mkdir -p "$lists/partial"
-          cat > "$sources" <<'APT'
-          deb [signed-by=/usr/share/keyrings/ubuntu-archive-keyring.gpg] https://archive.ubuntu.com/ubuntu noble main universe
-          deb [signed-by=/usr/share/keyrings/ubuntu-archive-keyring.gpg] https://archive.ubuntu.com/ubuntu noble-updates main universe
-          deb [signed-by=/usr/share/keyrings/ubuntu-archive-keyring.gpg] https://security.ubuntu.com/ubuntu noble-security main universe
-          APT
-          options=(-o "Dir::Etc::sourcelist=$sources" -o "Dir::Etc::sourceparts=-" -o "Dir::State::lists=$lists" -o "Acquire::Retries=1" -o "Acquire::https::Timeout=20")
-          sudo apt-get "${options[@]}" update
-          sudo apt-get "${options[@]}" install -y --no-install-recommends mtd-utils
-          mkfs.jffs2 -V
+          sh autogen.sh
+          ./configure --without-tests --without-lsmtd --without-ubifs --without-lzo --without-zstd --without-xattr --without-selinux --without-crypto --disable-ubihealthd --with-zlib
+          make -j2 mkfs.jffs2
+          ./mkfs.jffs2 -V
       - name: Install fixed Rust
         run: rustup toolchain install 1.99.0 --profile minimal
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
@@ -112,4 +111,6 @@ jobs:
             (cd "$directory" && cargo +1.99.0 build --locked --release -p craft-anything-formats --example jffs2_payload_probe)
           done
       - name: Compare native images, exact recovered bytes, time and process peak RSS
+        env:
+          JFFS2_NATIVE_PRODUCER: ${{ github.workspace }}/mtd-source/mkfs.jffs2
         run: python3 validation/.github/validation/jffs2_payload_compare.py

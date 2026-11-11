@@ -9,7 +9,7 @@ import subprocess
 
 work = Path("jffs2-native").resolve()
 work.mkdir()
-mkfs = shutil.which("mkfs.jffs2")
+mkfs = os.environ.get("JFFS2_NATIVE_PRODUCER") or shutil.which("mkfs.jffs2")
 assert mkfs, "mkfs.jffs2 must be installed"
 version = subprocess.run([mkfs, "-V"], check=True, capture_output=True, text=True)
 cpu = min(os.sched_getaffinity(0))

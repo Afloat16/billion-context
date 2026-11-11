@@ -23,7 +23,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: Afloat16/craft-anything
-          ref: 7116cc6cb486ada87497de2568c6b6db5a2ea783
+          ref: 258b7df17de106b5ef907bb32440c53c99c664fd
           fetch-depth: 0
           persist-credentials: false
       - name: Install Rust
@@ -37,7 +37,42 @@ jobs:
           key: craft-js-module-path-bytes-v1
           save-if: true
           cache-on-failure: true
-      - name: Check original public recovery paths against the native filesystem
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Reproduce original byte-budget failures and controls
+        run: |
+          python3 - <<'PY'
+          import pathlib
+          import subprocess
+          path = pathlib.Path("crates/js/src/recover.rs")
+          fixed = path.read_bytes()
+          try:
+              path.write_bytes(subprocess.check_output(["git", "show", "7116cc6cb486ada87497de2568c6b6db5a2ea783:" + path.as_posix()]))
+              result = subprocess.run(
+                  ["cargo", "--config", 'profile.dev.package."*".opt-level=0', "test", "--locked",
+                   "-p", "craft-anything-js", "--test", "recovery_path_byte_budget", "--", "--nocapture"],
+                  text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+              )
+              print(result.stdout, end="")
+              failures = {
+                  "multibyte_module_filenames_fit_a_native_component",
+                  "multibyte_parent_components_are_bounded_too",
+                  "nested_multibyte_paths_do_not_expand_past_the_native_path_budget",
+                  "recovered_collisions_keep_writable_names_and_original_identities",
+                  "source_map_paths_without_a_fallback_extension_are_bounded",
+              }
+              if result.returncode == 0 or "test result: FAILED. 2 passed; 5 failed;" not in result.stdout:
+                  raise SystemExit("Original source did not reproduce five failures and two passing controls")
+              failure_list = result.stdout.rsplit("failures:", 1)[-1].split("test result:", 1)[0]
+              actual_failures = {line.strip() for line in failure_list.splitlines() if line.strip()}
+              if actual_failures != failures:
+                  raise SystemExit("Unexpected original-source failure set: " + repr(actual_failures))
+          finally:
+              path.write_bytes(fixed)
+          PY
+      - name: Run the full JavaScript and analysis suites
+        run: cargo --config 'profile.dev.package."*".opt-level=0' test --locked -p craft-anything-js -p craft-anything-analysis
+      - name: Check fixed public recovery paths against the native filesystem
         run: |
           mkdir -p crates/js/examples
           trap 'rm -f crates/js/examples/validation_module_path_bytes.rs' EXIT
@@ -97,15 +132,26 @@ jobs:
           try {
             const nameMax = execFileSync("getconf", ["NAME_MAX", temporary], { encoding: "utf8" }).trim();
             assert.equal(nameMax, "255");
-            result.paths.forEach((relative, index) => save(relative, "fixture " + index, "path-" + index, index < 3));
+            result.paths.forEach((relative, index) => save(relative, "fixture " + index, "path-" + index, false));
             assert.equal(new Set(result.modules.map(m => m.file_name)).size, 3);
-            for (const module of result.modules) save(module.file_name, module.text, "recovered", true);
-            assert.equal(outcomes.filter(o => o.error === "ENAMETOOLONG").length, 6);
-            assert.equal(outcomes.filter(o => o.error === null).length, 3);
-            console.log("Baseline public recovery paths on " + process.platform + " / Node " + process.version + " / NAME_MAX=" + nameMax + ": " + JSON.stringify(outcomes));
+            for (const module of result.modules) save(module.file_name, module.text, "recovered", false);
+            assert.equal(outcomes.filter(o => o.error === "ENAMETOOLONG").length, 0);
+            assert.equal(outcomes.filter(o => o.error === null).length, 9);
+            console.log("Fixed public recovery paths on " + process.platform + " / Node " + process.version + " / NAME_MAX=" + nameMax + ": " + JSON.stringify(outcomes));
           } finally {
             fs.rmSync(temporary, { recursive: true, force: true });
           }
           NODE
-      - name: Require an unchanged source tree
-        run: git diff --exit-code
+      - name: Run strict all-target Clippy
+        run: cargo --config 'profile.dev.package."*".opt-level=0' clippy --locked -p craft-anything-js -p craft-anything-analysis --all-targets -- -D warnings
+      - name: Check repository contracts
+        run: |
+          cargo --config 'profile.dev.package."*".opt-level=0' xtask layers
+          cargo --config 'profile.dev.package."*".opt-level=0' xtask locks
+          cargo --config 'profile.dev.package."*".opt-level=0' xtask secrets
+      - name: Check all WebAssembly layers
+        run: cargo --config 'profile.dev.package."*".opt-level=0' xtask wasm
+      - name: Require formatting and an unchanged source tree
+        run: |
+          cargo fmt --all -- --check
+          git diff --exit-code

@@ -1,0 +1,49 @@
+name: Claude cache final-head Chrome helper comparison
+on:
+  push:
+    branches: [validation/claude-cache-chrome-20261111]
+permissions:
+  contents: read
+jobs:
+  integration:
+    name: Chrome helper on ${{ matrix.label }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: main-308a9ab
+            ref: 308a9ab4a141ac49ca0e72bbccc0c9cdf3770ca0
+          - label: cache-14be1f8
+            ref: 14be1f8cde01eb774d1ad02e8c03a8371e77085f
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: Afloat16/claude-mem
+          ref: ${{ matrix.ref }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Run the unchanged Chrome helper cases
+        shell: bash
+        run: |
+          bun test tests/helpers/chrome-devtools.browser.test.ts --timeout 30000 2>&1 | tee chrome-helper.log
+      - name: Repeat owned Chrome startup and teardown
+        shell: bash
+        run: |
+          for iteration in 1 2 3 4; do
+            bun test tests/helpers/chrome-devtools.browser.test.ts --timeout 30000 2>&1 | tee -a chrome-helper.log
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: chrome-helper-${{ matrix.label }}
+          path: chrome-helper.log
+          retention-days: 7

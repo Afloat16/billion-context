@@ -12,7 +12,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: Afloat16/claude-mem
-          ref: de96e4867692718c1d124489e31741319a236ca9
+          ref: e42fa33a1358ea8c01a4dc85970cf1fde8b000a4
           fetch-depth: 2
           persist-credentials: false
       - uses: actions/setup-node@v4
@@ -66,8 +66,8 @@ jobs:
       - name: Reproduce missing callable symbols on unchanged main
         shell: bash
         run: |
-          git fetch --no-tags --depth=1 origin 51ecfbe540b634f77eaa52e469b9bedadfd6b1e0 47e478908e475ba91feee28d97fb89fbf548a2f2
-          git checkout --detach 47e478908e475ba91feee28d97fb89fbf548a2f2
+          git fetch --no-tags --depth=1 origin 51ecfbe540b634f77eaa52e469b9bedadfd6b1e0 9e26e6047280890f42683a7e2cf818c9e519ff29
+          git checkout --detach 9e26e6047280890f42683a7e2cf818c9e519ff29
           set +e
           bun test tests/services/smart-file-read/wrapped-callable-values.test.ts --timeout 120000 2>&1 | tee "$RUNNER_TEMP/wrapped-callables-baseline.log"
           result=${PIPESTATUS[0]}
@@ -78,7 +78,7 @@ jobs:
           grep -F '(fail) transparent callable value wrappers > searches grouped functions' "$RUNNER_TEMP/wrapped-callables-baseline.log"
       - name: Verify fixed native symbols search and unfold
         run: |
-          git checkout --detach de96e4867692718c1d124489e31741319a236ca9
+          git checkout --detach e42fa33a1358ea8c01a4dc85970cf1fde8b000a4
           bun test tests/services/smart-file-read/wrapped-callable-values.test.ts --timeout 120000
       - name: Run all native smart file regressions
         run: bun test tests/services/smart-file-read --timeout 120000

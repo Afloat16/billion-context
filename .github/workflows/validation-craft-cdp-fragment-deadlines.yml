@@ -1,0 +1,174 @@
+name: CDP fragment deadline baseline against native WebSocket
+
+on:
+  push:
+    branches: [validation/craft-cdp-fragment-deadlines-20261111]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cdp-fragments:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      CARGO_INCREMENTAL: "0"
+      CARGO_BUILD_JOBS: "2"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+      CARGO_PROFILE_DEV_OPT_LEVEL: "0"
+      CARGO_TERM_COLOR: never
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: Afloat16/craft-anything
+          ref: 06342656204c5ef25d145ec632468914d2a2982e
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check native WebSocket availability
+        run: node -p 'typeof WebSocket'
+      - name: Install Rust
+        run: |
+          rustup toolchain install 1.99.0 --profile minimal
+          rustup default 1.99.0
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
+        with:
+          key: craft-cdp-fragment-deadlines-v1
+          save-if: true
+          cache-on-failure: true
+      - name: Reproduce fragmented events lost at observation deadlines
+        run: |
+          mkdir -p crates/engines/examples
+          trap 'rm -f crates/engines/examples/validation_cdp_fragments.rs' EXIT
+          cat > crates/engines/examples/validation_cdp_fragments.rs <<'RS'
+          use craft_anything_engines::cdp::{CdpClient, Deadline, WsConn, parse_endpoint, ws_target};
+          use craft_anything_platform::cancel::CancelToken;
+          use serde_json::json;
+          use std::time::Duration;
+          
+          fn main() {
+              let mut args = std::env::args().skip(1);
+              let origin = args.next().expect("origin");
+              let url = args.next().expect("websocket URL");
+              let endpoint = parse_endpoint(&origin).unwrap();
+              let target = ws_target(&url, &endpoint).unwrap();
+              let connect = Deadline::new(Duration::from_secs(5), CancelToken::default());
+              let conn = WsConn::connect(&target, 4096, &connect).unwrap();
+              let mut client = CdpClient::new(conn);
+              let observe = Deadline::new(Duration::from_millis(100), CancelToken::default());
+              let pumped = client.pump_until(&observe);
+              let next = Deadline::new(Duration::from_secs(3), CancelToken::default());
+              let result = client.call("Runtime.evaluate", json!({"expression": "1+1", "returnByValue": true}), None, &next);
+              let events: Vec<_> = client.take_events().into_iter().map(|event| json!({"method": event.method, "params": event.params})).collect();
+              match result {
+                  Ok(reply) => println!("{}", json!({"ok": true, "pumped": pumped.is_ok(), "reply": reply, "events": events})),
+                  Err(error) => println!("{}", json!({"ok": false, "pumped": pumped.is_ok(), "code": error.code, "message": error.message, "events": events})),
+              }
+          }
+          RS
+          cargo --config 'profile.dev.package."*".opt-level=0' build --locked -p craft-anything-engines --example validation_cdp_fragments
+          cat > /tmp/validation_cdp_fragments.mjs <<'JS'
+          import assert from "node:assert/strict";
+          import http from "node:http";
+          import crypto from "node:crypto";
+          import { spawn } from "node:child_process";
+          import { once } from "node:events";
+          
+          assert.equal(typeof WebSocket, "function");
+          const event = {method:"Runtime.consoleAPICalled",params:{text:"你好🌍"}};
+          const bytes = Buffer.from(JSON.stringify(event));
+          function frame(opcode, fin, value){
+            const data=Buffer.isBuffer(value)?value:Buffer.from(value);
+            assert.ok(data.length<126);
+            return Buffer.concat([Buffer.from([(fin?0x80:0)|opcode,data.length]),data]);
+          }
+          const cut=31;
+          const emoji=bytes.indexOf(Buffer.from("🌍"))+1;
+          const whole=frame(1,true,bytes);
+          const tests=[
+            {name:"complete_event",initial:whole,tail:Buffer.alloc(0),old:true,events:[event]},
+            {name:"fragmented_text",initial:frame(1,false,bytes.subarray(0,cut)),tail:frame(0,true,bytes.subarray(cut)),old:false,events:[event]},
+            {name:"multiple_fragments",initial:Buffer.concat([frame(1,false,bytes.subarray(0,12)),frame(0,false,bytes.subarray(12,cut))]),tail:frame(0,true,bytes.subarray(cut)),old:false,events:[event]},
+            {name:"ping_inside_fragmented_event",initial:Buffer.concat([frame(1,false,bytes.subarray(0,cut)),frame(9,true,"probe")]),tail:frame(0,true,bytes.subarray(cut)),old:false,events:[event]},
+            {name:"utf8_split_between_frames",initial:frame(1,false,bytes.subarray(0,emoji)),tail:frame(0,true,bytes.subarray(emoji)),old:false,events:[event]},
+            {name:"fragmented_binary_json",initial:frame(2,false,bytes.subarray(0,cut)),tail:frame(0,true,bytes.subarray(cut)),old:false,events:[event]},
+            {name:"partial_frame_bytes",initial:whole.subarray(0,20),tail:whole.subarray(20),old:true,events:[event]},
+            {name:"empty_initial_fragment",initial:frame(1,false,Buffer.alloc(0)),tail:frame(0,true,bytes),old:false,events:[event]},
+            {name:"no_pending_event",initial:Buffer.alloc(0),tail:Buffer.alloc(0),old:true,events:[]},
+          ];
+          const server=http.createServer();
+          server.on("upgrade",(req,socket,head)=>{
+            const test=tests[Number(req.url.slice(1))];assert.ok(test);
+            socket.on("error",()=>{});
+            const accept=crypto.createHash("sha1").update(req.headers["sec-websocket-key"]+"258EAFA5-E914-47DA-95CA-C5AB0DC85B11").digest("base64");
+            const upgrade=Buffer.from("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: "+accept+"\r\n\r\n");
+            socket.write(Buffer.concat([upgrade,test.initial]));
+            let pending=head, answered=false;
+            function parse(chunk){
+              pending=Buffer.concat([pending,chunk]);
+              while(pending.length>=2){
+                const opcode=pending[0]&15;
+                let length=pending[1]&127,offset=2;
+                if(length===126){if(pending.length<4)return;length=pending.readUInt16BE(2);offset=4;}
+                assert.notEqual(length,127);
+                const masked=(pending[1]&128)!==0;assert.ok(masked);
+                if(pending.length<offset+4+length)return;
+                const mask=pending.subarray(offset,offset+4);offset+=4;
+                const payload=Buffer.from(pending.subarray(offset,offset+length));
+                for(let i=0;i<payload.length;i++)payload[i]^=mask[i&3];
+                pending=pending.subarray(offset+length);
+                if(opcode===8){socket.end(frame(8,true,payload));return;}
+                if(opcode===10)continue;
+                assert.equal(opcode,1);
+                const request=JSON.parse(payload.toString());
+                assert.equal(request.method,"Runtime.evaluate");assert.equal(answered,false);answered=true;
+                const reply=JSON.stringify({id:request.id,result:{result:{type:"number",value:2}}});
+                socket.write(Buffer.concat([test.tail,frame(1,true,reply)]));
+              }
+            }
+            socket.on("data",parse);
+            if(head.length)parse(Buffer.alloc(0));
+          });
+          server.listen(0,"127.0.0.1");await once(server,"listening");
+          const origin="http://127.0.0.1:"+server.address().port;
+          const wsOrigin=origin.replace("http:","ws:");
+          function reference(index){
+            return new Promise((resolve,reject)=>{
+              const ws=new WebSocket(wsOrigin+"/"+index);ws.binaryType="arraybuffer";
+              const events=[];
+              const timer=setTimeout(()=>{ws.close();reject(new Error("native websocket timeout "+index));},3000);
+              ws.onopen=()=>setTimeout(()=>ws.send(JSON.stringify({id:1,method:"Runtime.evaluate",params:{expression:"1+1",returnByValue:true}})),100);
+              ws.onmessage=ev=>{
+                const value=JSON.parse(typeof ev.data==="string"?ev.data:Buffer.from(ev.data).toString());
+                if(value.method)events.push(value);
+                if(value.id===1){clearTimeout(timer);ws.close();resolve({reply:value.result,events});}
+              };
+              ws.onerror=ev=>{clearTimeout(timer);reject(new Error("native websocket rejected fixture "+index));};
+            });
+          }
+          function production(index){
+            return new Promise((resolve,reject)=>{
+              const child=spawn("target/debug/examples/validation_cdp_fragments",[origin,wsOrigin+"/"+index],{stdio:["ignore","pipe","pipe"]});
+              let out="",err="";child.stdout.on("data",b=>out+=b);child.stderr.on("data",b=>err+=b);
+              child.on("error",reject);child.on("close",code=>code===0?resolve(JSON.parse(out)):reject(new Error(err||"child exited "+code)));
+            });
+          }
+          const outcomes=[];
+          try{
+            for(let i=0;i<tests.length;i++){
+              const test=tests[i], ref=await reference(i), actual=await production(i);
+              assert.deepEqual(ref.events,test.events,test.name+" native event");
+              assert.deepEqual(ref.reply,{result:{type:"number",value:2}},test.name+" native reply");
+              assert.equal(actual.pumped,true,test.name+" observation completed");
+              assert.equal(actual.ok,process.env.EXPECT_FIXED==="1"||test.old,test.name+" production "+JSON.stringify(actual));
+              if(actual.ok){assert.deepEqual(actual.events,ref.events);assert.deepEqual(actual.reply,ref.reply);}
+              else assert.ok(actual.message.includes("out-of-order"),actual.message);
+              outcomes.push({name:test.name,native_ok:true,production_ok:actual.ok,event_count:actual.events.length});
+            }
+          }finally{server.close();server.closeAllConnections();}
+          console.log("CDP fragmented event / Node "+process.version+": "+JSON.stringify(outcomes));
+          console.log("CDP cases="+outcomes.length+" lost_fragment_cases="+outcomes.filter(x=>!x.production_ok).length);
+          JS
+          node /tmp/validation_cdp_fragments.mjs
+          git diff --exit-code

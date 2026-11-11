@@ -1,0 +1,41 @@
+name: Final legacy Zstandard ZIP revision verification
+on:
+  push:
+    branches: [validation/craft-zip-legacy-zstandard-final-20261111]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  final:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      CARGO_INCREMENTAL: "0"
+      CARGO_BUILD_JOBS: "2"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: Afloat16/craft-anything
+          ref: 10d5048bbdeb66b182f121e4853cf547507fbd26
+          fetch-depth: 8
+          persist-credentials: false
+      - name: Prove all non-document files are identical to the tested implementation
+        run: |
+          python3 - <<'PY'
+          import subprocess
+          changed = subprocess.check_output(["git", "diff", "--name-only", "cce4d005e6c885a560e2d9e743328ee70eb858de", "HEAD"], text=True).splitlines()
+          assert set(changed) == {"docs/ROADMAP.md", "docs/STATUS.md"}, changed
+          print("All non-document files are identical to the fully tested cce4d005e6c885a560e2d9e743328ee70eb858de; only ROADMAP and STATUS changed.")
+          PY
+      - name: Install Rust
+        run: |
+          rustup toolchain install 1.99.0 --profile minimal --component rustfmt
+          rustup default 1.99.0
+      - name: Verify formatting, public content and clean tree
+        run: |
+          cargo fmt --all -- --check
+          cargo --config 'profile.dev.package."*".opt-level=0' xtask secrets
+          git diff --check 7116cc6cb486ada87497de2568c6b6db5a2ea783 HEAD
+          git diff --exit-code

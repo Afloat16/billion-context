@@ -1,0 +1,353 @@
+{
+  "format": "contribution-worklog",
+  "version": 1,
+  "record": {
+    "repository": "storytold/craft-anything",
+    "base": "main",
+    "base_sha": "adeddc9149b97c21e595e743c9875d84e805eece",
+    "branch": "refactor/r3.12-jffs2-borrowed-payloads-20261111",
+    "head": "fd7a56682a8ab4659defde285b4f0a765e263857",
+    "topic": "JFFS2 扫描与恢复借用节点数据，减少大镜像的重复复制与内存占用",
+    "title": "Borrow JFFS2 node payloads until file recovery (R3.12)",
+    "body": "## Problem\n\nThe JFFS2 scanner copies every data-node payload into an owned vector before applying the file-recovery budgets. Raw nodes are copied into another temporary vector during recovery. A large uncompressed image therefore retains an extra payload-sized allocation even when the caller's output budget excludes those files.\n\n## Change\n\nBorrow each node's payload from the input image during the scan. Recovery uses borrowed raw bytes and owned zlib output, then copies only the required ranges into the final owned file. The public result remains owned.\n\nAll nodes are still visited in the existing version order. Length checks, damaged and obsolete-node diagnostics, byte-order handling, zero extents and recovery budgets are preserved. This does not discard old nodes before checking their diagnostics, change CRC policy, or introduce a dependency.\n\nThe public R3.12 claim preceded implementation at `a9f22504`. Before review it was replayed at `a9aadb28` on main `adeddc9149b97c21e595e743c9875d84e805eece`. Final head: `fd7a56682a8ab4659defde285b4f0a765e263857`.\n\n## Validation\n\n- [Complete formats suite and repository gates](https://github.com/Afloat16/billion-context/actions/runs/43047885635/job/130616644339): **1703 passed, 0 failed, 10 existing ignores across 207 test targets**; formatting, strict all-target formats Clippy, layers, locks, secret scan and all L0–L2 WebAssembly builds passed.\n- [Native same-run comparison](https://github.com/Afloat16/billion-context/actions/runs/43050917254/job/130627483625): the **21 existing JFFS2 tests pass on both revisions**, covering byte order, decoded lengths, damage replacement and unrecovered-file sizes. A real mtd-utils 2.2.0 producer creates raw little- and big-endian images and a separate zlib control. Every recovered regular file is compared byte-for-byte with the original source; complete serialized metadata plus file bytes have identical SHA-256 across versions.\n- [Final main integration](https://github.com/Afloat16/billion-context/actions/runs/43053332319/job/130636082304): all formats sources, tests and dependency files are identical to the fully tested and measured implementation. The only intervening non-document changes are unchanged upstream AI, analysis and engine files. Final 21 JFFS2 controls, strict Clippy, formatting, repository contracts, all L0–L2 WebAssembly builds and clean-tree checks pass.\n\n## Measured effect\n\nOne Ubuntu 24.04 runner, AMD EPYC 9V74, Rust 1.99.0 release builds with the unchanged lockfile. Three fresh processes per implementation and workload, alternating versions on the same pinned CPU; all **18 measured results** preserve the complete output.\n\n| Native workload | Reader median, before → after | Process peak RSS median, before → after |\n| --- | ---: | ---: |\n| 16 MiB raw little-endian file | 16.790 → 8.386 ms | 50.8 → 34.7 MiB |\n| 64 MiB raw big-endian file | 69.136 → 34.242 ms | 196.4 → 132.0 MiB |\n| 64 MiB raw little-endian file, zero file-recovery budget | 33.151 → 1.092 ms | 132.3 → 68.0 MiB |\n\nReader timing excludes input I/O, output hashing and source comparison. Whole-process RSS includes the input image and recovered output. The zlib control is a correctness check, not a reported speedup. All individual readings, commands, input hashes and output hashes are in the native run.\n\nThe initial native job and its first retry stopped before benchmarking because Ubuntu package mirrors could not resolve. The successful run builds the same native producer from the fixed upstream mtd-utils 2.2.0 source `31e990c56aba7584cde310685d663bb122f16003`; it does not depend on that failed package installation.\n\n## Related work\n\nChecked the existing JFFS2 byte-order, extent-recovery, output-budget and traversal changes (#1665, #1636, #1246, #708, #1522 and #722). This change targets payload ownership and duplicate allocations while preserving those contracts.\n",
+    "url": "https://github.com/storytold/craft-anything/compare/main...Afloat16:refactor/r3.12-jffs2-borrowed-payloads-20261111?expand=1&title=Borrow%20JFFS2%20node%20payloads%20until%20file%20recovery%20(R3.12)&body=%23%23%20Problem%0A%0AThe%20JFFS2%20scanner%20copies%20every%20data-node%20payload%20into%20an%20owned%20vector%20before%20applying%20the%20file-recovery%20budgets.%20Raw%20nodes%20are%20copied%20into%20another%20temporary%20vector%20during%20recovery.%20A%20large%20uncompressed%20image%20therefore%20retains%20an%20extra%20payload-sized%20allocation%20even%20when%20the%20caller's%20output%20budget%20excludes%20those%20files.%0A%0A%23%23%20Change%0A%0ABorrow%20each%20node's%20payload%20from%20the%20input%20image%20during%20the%20scan.%20Recovery%20uses%20borrowed%20raw%20bytes%20and%20owned%20zlib%20output%2C%20then%20copies%20only%20the%20required%20ranges%20into%20the%20final%20owned%20file.%20The%20public%20result%20remains%20owned.%0A%0AAll%20nodes%20are%20still%20visited%20in%20the%20existing%20version%20order.%20Length%20checks%2C%20damaged%20and%20obsolete-node%20diagnostics%2C%20byte-order%20handling%2C%20zero%20extents%20and%20recovery%20budgets%20are%20preserved.%20This%20does%20not%20discard%20old%20nodes%20before%20checking%20their%20diagnostics%2C%20change%20CRC%20policy%2C%20or%20introduce%20a%20dependency.%0A%0AThe%20public%20R3.12%20claim%20preceded%20implementation%20at%20%60a9f22504%60.%20Before%20review%20it%20was%20replayed%20at%20%60a9aadb28%60%20on%20main%20%60adeddc9149b97c21e595e743c9875d84e805eece%60.%20Final%20head%3A%20%60fd7a56682a8ab4659defde285b4f0a765e263857%60.%0A%0A%23%23%20Validation%0A%0A-%20%5BComplete%20formats%20suite%20and%20repository%20gates%5D(https%3A%2F%2Fgithub.com%2FAfloat16%2Fbillion-context%2Factions%2Fruns%2F43047885635%2Fjob%2F130616644339)%3A%20**1703%20passed%2C%200%20failed%2C%2010%20existing%20ignores%20across%20207%20test%20targets**%3B%20formatting%2C%20strict%20all-target%20formats%20Clippy%2C%20layers%2C%20locks%2C%20secret%20scan%20and%20all%20L0%E2%80%93L2%20WebAssembly%20builds%20passed.%0A-%20%5BNative%20same-run%20comparison%5D(https%3A%2F%2Fgithub.com%2FAfloat16%2Fbillion-context%2Factions%2Fruns%2F43050917254%2Fjob%2F130627483625)%3A%20the%20**21%20existing%20JFFS2%20tests%20pass%20on%20both%20revisions**%2C%20covering%20byte%20order%2C%20decoded%20lengths%2C%20damage%20replacement%20and%20unrecovered-file%20sizes.%20A%20real%20mtd-utils%202.2.0%20producer%20creates%20raw%20little-%20and%20big-endian%20images%20and%20a%20separate%20zlib%20control.%20Every%20recovered%20regular%20file%20is%20compared%20byte-for-byte%20with%20the%20original%20source%3B%20complete%20serialized%20metadata%20plus%20file%20bytes%20have%20identical%20SHA-256%20across%20versions.%0A-%20%5BFinal%20main%20integration%5D(https%3A%2F%2Fgithub.com%2FAfloat16%2Fbillion-context%2Factions%2Fruns%2F43053332319%2Fjob%2F130636082304)%3A%20all%20formats%20sources%2C%20tests%20and%20dependency%20files%20are%20identical%20to%20the%20fully%20tested%20and%20measured%20implementation.%20The%20only%20intervening%20non-document%20changes%20are%20unchanged%20upstream%20AI%2C%20analysis%20and%20engine%20files.%20Final%2021%20JFFS2%20controls%2C%20strict%20Clippy%2C%20formatting%2C%20repository%20contracts%2C%20all%20L0%E2%80%93L2%20WebAssembly%20builds%20and%20clean-tree%20checks%20pass.%0A%0A%23%23%20Measured%20effect%0A%0AOne%20Ubuntu%2024.04%20runner%2C%20AMD%20EPYC%209V74%2C%20Rust%201.99.0%20release%20builds%20with%20the%20unchanged%20lockfile.%20Three%20fresh%20processes%20per%20implementation%20and%20workload%2C%20alternating%20versions%20on%20the%20same%20pinned%20CPU%3B%20all%20**18%20measured%20results**%20preserve%20the%20complete%20output.%0A%0A%7C%20Native%20workload%20%7C%20Reader%20median%2C%20before%20%E2%86%92%20after%20%7C%20Process%20peak%20RSS%20median%2C%20before%20%E2%86%92%20after%20%7C%0A%7C%20---%20%7C%20---%3A%20%7C%20---%3A%20%7C%0A%7C%2016%20MiB%20raw%20little-endian%20file%20%7C%2016.790%20%E2%86%92%208.386%20ms%20%7C%2050.8%20%E2%86%92%2034.7%20MiB%20%7C%0A%7C%2064%20MiB%20raw%20big-endian%20file%20%7C%2069.136%20%E2%86%92%2034.242%20ms%20%7C%20196.4%20%E2%86%92%20132.0%20MiB%20%7C%0A%7C%2064%20MiB%20raw%20little-endian%20file%2C%20zero%20file-recovery%20budget%20%7C%2033.151%20%E2%86%92%201.092%20ms%20%7C%20132.3%20%E2%86%92%2068.0%20MiB%20%7C%0A%0AReader%20timing%20excludes%20input%20I%2FO%2C%20output%20hashing%20and%20source%20comparison.%20Whole-process%20RSS%20includes%20the%20input%20image%20and%20recovered%20output.%20The%20zlib%20control%20is%20a%20correctness%20check%2C%20not%20a%20reported%20speedup.%20All%20individual%20readings%2C%20commands%2C%20input%20hashes%20and%20output%20hashes%20are%20in%20the%20native%20run.%0A%0AThe%20initial%20native%20job%20and%20its%20first%20retry%20stopped%20before%20benchmarking%20because%20Ubuntu%20package%20mirrors%20could%20not%20resolve.%20The%20successful%20run%20builds%20the%20same%20native%20producer%20from%20the%20fixed%20upstream%20mtd-utils%202.2.0%20source%20%6031e990c56aba7584cde310685d663bb122f16003%60%3B%20it%20does%20not%20depend%20on%20that%20failed%20package%20installation.%0A%0A%23%23%20Related%20work%0A%0AChecked%20the%20existing%20JFFS2%20byte-order%2C%20extent-recovery%2C%20output-budget%20and%20traversal%20changes%20(%231665%2C%20%231636%2C%20%231246%2C%20%23708%2C%20%231522%20and%20%23722).%20This%20change%20targets%20payload%20ownership%20and%20duplicate%20allocations%20while%20preserving%20those%20contracts.%0A",
+    "state": "ready_pending_pr",
+    "merged": false,
+    "public_claim": "a9aadb28f8b503c3443048125dc84746cc33f810",
+    "original_claim": "a9f22504ed08b213e819485f0b73be83575b2857",
+    "tested_head": "ee91a2b82639b673b140442615f9cab0bb71a73d",
+    "validation": {
+      "full_run": 43047885635,
+      "full_job": 130616644339,
+      "passed": 1703,
+      "failed": 0,
+      "ignored": 10,
+      "targets": 207,
+      "native_run": 43050917254,
+      "native_job": 130627483625,
+      "final_run": 43053332319,
+      "final_job": 130636082304,
+      "results": {
+        "ENVIRONMENT": [
+          {
+            "platform": "Linux-7.0.0-1017-azure-x86_64-with-glibc2.39",
+            "cpu": "AMD EPYC 9V74 80-Core Processor",
+            "pinned_cpu": 0,
+            "producer": "mkfs.jffs2 (mtd-utils) 2.2.0"
+          }
+        ],
+        "FIXTURE": [
+          {
+            "name": "raw_le_16m",
+            "source_bytes": 16777216,
+            "image_bytes": 17073972,
+            "image_sha256": "7d2560d5d8eb3e04c001e505d732e829f7040502e9bcaa36475dbca22f7b91c6",
+            "byte_order": "little",
+            "data_nodes": 4344,
+            "codecs": [
+              0
+            ],
+            "command": [
+              "/home/runner/work/billion-context/billion-context/mtd-source/mkfs.jffs2",
+              "-r",
+              "/home/runner/work/billion-context/billion-context/jffs2-native/raw_le_16m-source",
+              "-o",
+              "/home/runner/work/billion-context/billion-context/jffs2-native/raw_le_16m.jffs2",
+              "-n",
+              "-f",
+              "-l",
+              "-m",
+              "none"
+            ],
+            "producer_stderr": ""
+          },
+          {
+            "name": "raw_be_64m",
+            "source_bytes": 67108864,
+            "image_bytes": 68294896,
+            "image_sha256": "a7f3282e2e61a74ab2d0fcc4621989126809cc2c8644f5e74fd0013414459c09",
+            "byte_order": "big",
+            "data_nodes": 17371,
+            "codecs": [
+              0
+            ],
+            "command": [
+              "/home/runner/work/billion-context/billion-context/mtd-source/mkfs.jffs2",
+              "-r",
+              "/home/runner/work/billion-context/billion-context/jffs2-native/raw_be_64m-source",
+              "-o",
+              "/home/runner/work/billion-context/billion-context/jffs2-native/raw_be_64m.jffs2",
+              "-n",
+              "-f",
+              "-b",
+              "-m",
+              "none"
+            ],
+            "producer_stderr": ""
+          },
+          {
+            "name": "skipped_le_64m",
+            "source_bytes": 67108864,
+            "image_bytes": 68294896,
+            "image_sha256": "a703f0b5ab765a1b12d6b2408e4d6514f3902cb82b75f5a0a32be36d24a0adb5",
+            "byte_order": "little",
+            "data_nodes": 17371,
+            "codecs": [
+              0
+            ],
+            "command": [
+              "/home/runner/work/billion-context/billion-context/mtd-source/mkfs.jffs2",
+              "-r",
+              "/home/runner/work/billion-context/billion-context/jffs2-native/skipped_le_64m-source",
+              "-o",
+              "/home/runner/work/billion-context/billion-context/jffs2-native/skipped_le_64m.jffs2",
+              "-n",
+              "-f",
+              "-l",
+              "-m",
+              "none"
+            ],
+            "producer_stderr": ""
+          },
+          {
+            "name": "zlib_control",
+            "source_bytes": 1048576,
+            "image_bytes": 117640,
+            "image_sha256": "d985479ff9c63de1867062d66080ecc32b69e2b192d54e36eb34fc68b4fd516d",
+            "byte_order": "little",
+            "data_nodes": 260,
+            "codecs": [
+              0,
+              6
+            ],
+            "command": [
+              "/home/runner/work/billion-context/billion-context/mtd-source/mkfs.jffs2",
+              "-r",
+              "/home/runner/work/billion-context/billion-context/jffs2-native/zlib_control-source",
+              "-o",
+              "/home/runner/work/billion-context/billion-context/jffs2-native/zlib_control.jffs2",
+              "-n",
+              "-f",
+              "-l",
+              "-m",
+              "priority",
+              "-y",
+              "999:zlib",
+              "-t"
+            ],
+            "producer_stderr": ""
+          }
+        ],
+        "NATIVE_ZLIB_CONTROL": [
+          {
+            "matched": true,
+            "complete_output_sha256": "ddb398c5c1197d2e361b6cf74212cd3228b48a8a8d29facf240562a478c01714",
+            "compared_bytes_per_version": 1048604
+          }
+        ],
+        "READING": [
+          {
+            "workload": "raw_le_16m",
+            "version": "base",
+            "iteration": 0,
+            "elapsed_ms": 16.808767,
+            "peak_rss_kib": 52004,
+            "complete_output_sha256": "a2f0e76940405f6385975022bfc0f569b04d9b4eabf37574324c36fee060f99d",
+            "compared_bytes": 16777244
+          },
+          {
+            "workload": "raw_le_16m",
+            "version": "fixed",
+            "iteration": 0,
+            "elapsed_ms": 8.383883,
+            "peak_rss_kib": 35452,
+            "complete_output_sha256": "a2f0e76940405f6385975022bfc0f569b04d9b4eabf37574324c36fee060f99d",
+            "compared_bytes": 16777244
+          },
+          {
+            "workload": "raw_le_16m",
+            "version": "fixed",
+            "iteration": 1,
+            "elapsed_ms": 8.455039,
+            "peak_rss_kib": 35488,
+            "complete_output_sha256": "a2f0e76940405f6385975022bfc0f569b04d9b4eabf37574324c36fee060f99d",
+            "compared_bytes": 16777244
+          },
+          {
+            "workload": "raw_le_16m",
+            "version": "base",
+            "iteration": 1,
+            "elapsed_ms": 16.790149,
+            "peak_rss_kib": 52012,
+            "complete_output_sha256": "a2f0e76940405f6385975022bfc0f569b04d9b4eabf37574324c36fee060f99d",
+            "compared_bytes": 16777244
+          },
+          {
+            "workload": "raw_le_16m",
+            "version": "base",
+            "iteration": 2,
+            "elapsed_ms": 16.752273,
+            "peak_rss_kib": 52008,
+            "complete_output_sha256": "a2f0e76940405f6385975022bfc0f569b04d9b4eabf37574324c36fee060f99d",
+            "compared_bytes": 16777244
+          },
+          {
+            "workload": "raw_le_16m",
+            "version": "fixed",
+            "iteration": 2,
+            "elapsed_ms": 8.386035,
+            "peak_rss_kib": 35492,
+            "complete_output_sha256": "a2f0e76940405f6385975022bfc0f569b04d9b4eabf37574324c36fee060f99d",
+            "compared_bytes": 16777244
+          },
+          {
+            "workload": "raw_be_64m",
+            "version": "base",
+            "iteration": 0,
+            "elapsed_ms": 71.640483,
+            "peak_rss_kib": 201124,
+            "complete_output_sha256": "78967b942e9210c6251baec384b059613a3fc25e66a40a86b95454b9a2a8cf80",
+            "compared_bytes": 67108892
+          },
+          {
+            "workload": "raw_be_64m",
+            "version": "fixed",
+            "iteration": 0,
+            "elapsed_ms": 33.978274,
+            "peak_rss_kib": 135272,
+            "complete_output_sha256": "78967b942e9210c6251baec384b059613a3fc25e66a40a86b95454b9a2a8cf80",
+            "compared_bytes": 67108892
+          },
+          {
+            "workload": "raw_be_64m",
+            "version": "fixed",
+            "iteration": 1,
+            "elapsed_ms": 34.24209,
+            "peak_rss_kib": 135204,
+            "complete_output_sha256": "78967b942e9210c6251baec384b059613a3fc25e66a40a86b95454b9a2a8cf80",
+            "compared_bytes": 67108892
+          },
+          {
+            "workload": "raw_be_64m",
+            "version": "base",
+            "iteration": 1,
+            "elapsed_ms": 68.494235,
+            "peak_rss_kib": 201020,
+            "complete_output_sha256": "78967b942e9210c6251baec384b059613a3fc25e66a40a86b95454b9a2a8cf80",
+            "compared_bytes": 67108892
+          },
+          {
+            "workload": "raw_be_64m",
+            "version": "base",
+            "iteration": 2,
+            "elapsed_ms": 69.136378,
+            "peak_rss_kib": 201128,
+            "complete_output_sha256": "78967b942e9210c6251baec384b059613a3fc25e66a40a86b95454b9a2a8cf80",
+            "compared_bytes": 67108892
+          },
+          {
+            "workload": "raw_be_64m",
+            "version": "fixed",
+            "iteration": 2,
+            "elapsed_ms": 34.39489,
+            "peak_rss_kib": 135204,
+            "complete_output_sha256": "78967b942e9210c6251baec384b059613a3fc25e66a40a86b95454b9a2a8cf80",
+            "compared_bytes": 67108892
+          },
+          {
+            "workload": "skipped_le_64m",
+            "version": "base",
+            "iteration": 0,
+            "elapsed_ms": 33.120548,
+            "peak_rss_kib": 135460,
+            "complete_output_sha256": "7d322f4de0b910ded6bc2867320ce85a681b8723b86bd365fcf0a3c1080a4f82",
+            "compared_bytes": 0
+          },
+          {
+            "workload": "skipped_le_64m",
+            "version": "fixed",
+            "iteration": 0,
+            "elapsed_ms": 1.092168,
+            "peak_rss_kib": 69592,
+            "complete_output_sha256": "7d322f4de0b910ded6bc2867320ce85a681b8723b86bd365fcf0a3c1080a4f82",
+            "compared_bytes": 0
+          },
+          {
+            "workload": "skipped_le_64m",
+            "version": "fixed",
+            "iteration": 1,
+            "elapsed_ms": 1.078407,
+            "peak_rss_kib": 69596,
+            "complete_output_sha256": "7d322f4de0b910ded6bc2867320ce85a681b8723b86bd365fcf0a3c1080a4f82",
+            "compared_bytes": 0
+          },
+          {
+            "workload": "skipped_le_64m",
+            "version": "base",
+            "iteration": 1,
+            "elapsed_ms": 33.222601,
+            "peak_rss_kib": 135468,
+            "complete_output_sha256": "7d322f4de0b910ded6bc2867320ce85a681b8723b86bd365fcf0a3c1080a4f82",
+            "compared_bytes": 0
+          },
+          {
+            "workload": "skipped_le_64m",
+            "version": "base",
+            "iteration": 2,
+            "elapsed_ms": 33.151003,
+            "peak_rss_kib": 135412,
+            "complete_output_sha256": "7d322f4de0b910ded6bc2867320ce85a681b8723b86bd365fcf0a3c1080a4f82",
+            "compared_bytes": 0
+          },
+          {
+            "workload": "skipped_le_64m",
+            "version": "fixed",
+            "iteration": 2,
+            "elapsed_ms": 1.097185,
+            "peak_rss_kib": 69588,
+            "complete_output_sha256": "7d322f4de0b910ded6bc2867320ce85a681b8723b86bd365fcf0a3c1080a4f82",
+            "compared_bytes": 0
+          }
+        ],
+        "SUMMARY": [
+          {
+            "workload": "raw_le_16m",
+            "base": {
+              "parse_ms_median": 16.790149,
+              "peak_rss_kib_median": 52008
+            },
+            "fixed": {
+              "parse_ms_median": 8.386035,
+              "peak_rss_kib_median": 35488
+            },
+            "time_ratio": 2.0021558459987348
+          },
+          {
+            "workload": "raw_be_64m",
+            "base": {
+              "parse_ms_median": 69.136378,
+              "peak_rss_kib_median": 201124
+            },
+            "fixed": {
+              "parse_ms_median": 34.24209,
+              "peak_rss_kib_median": 135204
+            },
+            "time_ratio": 2.0190466761812726
+          },
+          {
+            "workload": "skipped_le_64m",
+            "base": {
+              "parse_ms_median": 33.151003,
+              "peak_rss_kib_median": 135460
+            },
+            "fixed": {
+              "parse_ms_median": 1.092168,
+              "peak_rss_kib_median": 69592
+            },
+            "time_ratio": 30.353391602757085
+          }
+        ]
+      }
+    }
+  }
+}

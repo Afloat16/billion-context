@@ -7,7 +7,7 @@ import sys
 
 HERE = Path(__file__).resolve().parent
 BASE = "35f11365026263f43884eadc9ec3296b99893ba1"
-FIXED = "98561b89f9792c0c7a42d5e27a5d16aa70936b69"
+FIXED = "6bafba62e745cd3e5fbebb2baf085fffee62ed7b"
 CARGO = ["cargo", "--config", 'profile.dev.package."*".opt-level=0', "test", "--locked"]
 PRODUCT = ["crates/formats/src/sqlite.rs", "crates/engine/src/tools/database_tools.rs"]
 NATIVE = Path("crates/engine/tests/sqlite_schema_native_validation.rs")

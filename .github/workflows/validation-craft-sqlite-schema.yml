@@ -26,7 +26,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: Afloat16/craft-anything
-          ref: 98561b89f9792c0c7a42d5e27a5d16aa70936b69
+          ref: 6bafba62e745cd3e5fbebb2baf085fffee62ed7b
           path: candidate
           fetch-depth: 2
           persist-credentials: false

@@ -1,0 +1,63 @@
+name: Claude knowledge multipart answer comparison
+on:
+  push:
+    branches: [validation/claude-knowledge-multipart-20261111]
+permissions:
+  contents: read
+jobs:
+  fixed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: Afloat16/claude-mem
+          ref: 1f0467d036c14e48dc3a8def1ea9c6141284ba70
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - name: Install repository dependencies
+        run: npm install --no-audit --no-fund
+      - name: Verify complete knowledge answers and saved sessions
+        run: bun test tests/worker/knowledge/knowledge-multipart-answer.test.ts --timeout 30000
+      - name: Run knowledge and corpus behavioral suites
+        run: bun test tests/worker/knowledge/ tests/worker/http/routes/corpus* --timeout 30000
+      - name: Check root and viewer TypeScript
+        run: npm run typecheck
+      - name: Build all shipped bundles
+        run: node scripts/build-hooks.js
+      - name: Check patch whitespace
+        run: git diff --check 308a9ab4a141ac49ca0e72bbccc0c9cdf3770ca0 HEAD
+  baseline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: Afloat16/claude-mem
+          ref: 67e1b92095b65150f871712810b494507100d423
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - name: Install repository dependencies
+        run: npm install --no-audit --no-fund
+      - name: Demonstrate multipart answer loss on unchanged main
+        shell: bash
+        run: |
+          set +e
+          bun test tests/worker/knowledge/knowledge-multipart-answer.test.ts --timeout 30000 2>&1 | tee /tmp/knowledge-multipart-baseline.log
+          result=${PIPESTATUS[0]}
+          set -e
+          test "$result" -eq 1
+          grep -F '4 fail' /tmp/knowledge-multipart-baseline.log
+          grep -F '3 pass' /tmp/knowledge-multipart-baseline.log

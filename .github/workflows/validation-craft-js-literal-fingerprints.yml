@@ -1,4 +1,4 @@
-name: JavaScript fingerprint framing and cache-version validation
+name: JavaScript literal fingerprint final-document validation
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
 jobs:
   literal-fingerprints:
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    timeout-minutes: 60
     env:
       CARGO_INCREMENTAL: "0"
       CARGO_BUILD_JOBS: "2"
@@ -23,286 +23,31 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: Afloat16/craft-anything
-          ref: 7d3dd731920f2d6158ee96c407ec6924f4b12337
+          ref: b2852f5be20729800dbda67286324ac2e48cb8cb
           fetch-depth: 0
           persist-credentials: false
       - name: Install Rust
         run: |
-          rustup toolchain install 1.99.0 --profile minimal --component rustfmt --component clippy --target wasm32-unknown-unknown
+          rustup toolchain install 1.99.0 --profile minimal --component rustfmt
           rustup default 1.99.0
-          rustc --version
-          node --version
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
         with:
           key: craft-js-literal-fingerprints-framing-v2
           save-if: true
           cache-on-failure: true
-      - name: Check formatting
-        run: cargo fmt --all -- --check
-      - name: Reproduce original and previous-head fingerprint failures
+      - name: Verify unchanged implementation, tests and dependencies
         run: |
           python3 - <<'PY'
-          import pathlib
           import subprocess
-          
-          path = pathlib.Path("crates/js/src/fingerprint.rs")
-          fixed = path.read_bytes()
-          original_js = {
-              "bigint_values_remain_distinct_without_float_conversion",
-              "regular_expression_patterns_and_flags_change_fingerprints",
-              "every_template_text_position_changes_the_fingerprint",
-              "tagged_template_raw_text_and_invalid_escapes_remain_observable",
-              "string_payloads_cannot_consume_later_node_boundaries",
-              "syntax_tree_boundaries_distinguish_siblings_from_nested_children",
-          }
-          previous_js = {
-              "string_payloads_cannot_consume_later_node_boundaries",
-              "syntax_tree_boundaries_distinguish_siblings_from_nested_children",
-          }
-          analysis_failures = {
-              "literal_changes_do_not_match_different_files_as_structural_renames",
-              "changed_bundle_literals_reach_the_changed_module_inventory",
-          }
-          try:
-              for source, js_failures in [
-                  ("22c44d01d271c49187104802459085f273f855f0", original_js),
-                  ("ed087f661d3e5766d8806f095b0d8548d9a09fda", previous_js),
-              ]:
-                  print("Fingerprint implementation negative control: " + source)
-                  path.write_bytes(subprocess.check_output(["git", "show", source + ":" + path.as_posix()]))
-                  for package, passing, failures in [
-                      ("craft-anything-js", 10 - len(js_failures), js_failures),
-                      ("craft-anything-analysis", 3, analysis_failures),
-                  ]:
-                      result = subprocess.run(
-                          ["cargo", "--config", 'profile.dev.package."*".opt-level=0', "test", "--locked",
-                           "-p", package, "--test", "literal_fingerprints", "--", "--nocapture"],
-                          text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                      )
-                      print(result.stdout, end="")
-                      wanted = f"test result: FAILED. {passing} passed; {len(failures)} failed;"
-                      if result.returncode == 0 or wanted not in result.stdout:
-                          raise SystemExit("Unexpected fingerprint baseline result: " + wanted)
-                      listed = result.stdout.rsplit("failures:", 1)[-1].split("test result:", 1)[0]
-                      actual = {line.strip() for line in listed.splitlines() if line.strip()}
-                      if actual != failures:
-                          raise SystemExit("Unexpected fingerprint failure set: " + repr(actual))
-          finally:
-              path.write_bytes(fixed)
+          base = "7d3dd731920f2d6158ee96c407ec6924f4b12337"
+          changed = set(subprocess.check_output(["git", "diff", "--name-only", base, "HEAD"], text=True).splitlines())
+          assert changed == {"docs/ROADMAP.md", "docs/STATUS.md"}, changed
+          subprocess.run(["git", "diff", "--exit-code", base, "HEAD", "--", ".", ":(exclude)docs/ROADMAP.md", ":(exclude)docs/STATUS.md"], check=True)
+          print("All implementation, test and dependency files are identical to the fully validated source.")
           PY
-      - name: Reproduce retained-graph comparison failures through Engine calls
-        run: |
-          python3 - <<'PY'
-          import pathlib
-          import subprocess
-          path = pathlib.Path("crates/engine/src/tools/application_tools.rs")
-          fixed = path.read_text()
-          original = subprocess.check_output(["git", "show", "ed087f661d3e5766d8806f095b0d8548d9a09fda:" + path.as_posix()], text=True)
-          boundary = "#[cfg(test)]\nmod tests {"
-          assert original.count(boundary) == fixed.count(boundary) == 1
-          try:
-              path.write_text(original.split(boundary, 1)[0] + boundary + fixed.split(boundary, 1)[1])
-              result = subprocess.run(
-                  ["cargo", "--config", 'profile.dev.package."*".opt-level=0', "test", "--locked",
-                   "-p", "craft-anything-engine", "--lib", "tools::application_tools::tests::", "--", "--nocapture"],
-                  text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-              )
-              print(result.stdout, end="")
-              if result.returncode == 0 or "test result: FAILED. 6 passed; 1 failed;" not in result.stdout:
-                  raise SystemExit("Previous comparison tools did not reproduce the stale-fingerprint failure with six controls")
-              listed = result.stdout.rsplit("failures:", 1)[-1].split("test result:", 1)[0]
-              actual = {line.strip() for line in listed.splitlines() if line.strip()}
-              assert actual == {"tools::application_tools::tests::comparison_tools_refuse_legacy_and_future_fingerprints"}, actual
-          finally:
-              path.write_text(fixed)
-          PY
-      - name: Run the full JavaScript, analysis and engine suites
-        run: cargo --config 'profile.dev.package."*".opt-level=0' test --locked -p craft-anything-js -p craft-anything-analysis -p craft-anything-engine
-      - name: Compare fixed fingerprints against real JavaScript results
-        run: |
-          mkdir -p crates/analysis/examples
-          trap 'rm -f crates/analysis/examples/validation_literal_fingerprints.rs' EXIT
-          cat > crates/analysis/examples/validation_literal_fingerprints.rs <<'RUST'
-          use std::io::Read;
-          use craft_anything_analysis::js_app::{AppFile, AppGraph, AppInput, AppOptions, analyze_application};
-          use craft_anything_analysis::js_compare::compare_versions;
-          use craft_anything_js::{Limits, analyze};
-          
-          fn graph(path: &str, source: &str) -> AppGraph {
-              let file = AppFile { path: path.into(), bytes: source.as_bytes().to_vec() };
-              let listing = vec![(file.path.clone(), file.bytes.len() as u64)];
-              analyze_application(&AppInput { files: vec![file], listing, ..Default::default() }, &AppOptions::default(), &|| false).unwrap()
-          }
-          
-          fn bundle(source: &str) -> String {
-              format!("(self.webpackChunkdemo=self.webpackChunkdemo||[]).push([[1],{{7:function(module,exports,require){{{source}}}}}]);")
-          }
-          
-          fn main() {
-              let mut input = String::new();
-              std::io::stdin().read_to_string(&mut input).unwrap();
-              let cases: Vec<(String, String)> = serde_json::from_str(&input).unwrap();
-              let result: Vec<_> = cases.into_iter().map(|(left, right)| {
-                  let l = analyze("left.js", &left, &Limits::default());
-                  let r = analyze("right.js", &right, &Limits::default());
-                  serde_json::json!({
-                      "left": l.facts.fingerprint,
-                      "right": r.facts.fingerprint,
-                      "files": compare_versions(&graph("left.js", &left), &graph("right.js", &right))["modules"],
-                      "bundle": compare_versions(&graph("bundle.js", &bundle(&left)), &graph("bundle.js", &bundle(&right)))["bundle_modules"],
-                  })
-              }).collect();
-              println!("{}", serde_json::to_string(&result).unwrap());
-          }
-          RUST
-          cargo --config 'profile.dev.package."*".opt-level=0' build --locked -p craft-anything-analysis --example validation_literal_fingerprints
-          node <<'NODE'
-          const assert = require("node:assert/strict");
-          const vm = require("node:vm");
-          const { execFileSync } = require("node:child_process");
-          const cases = [
-            {
-              "name": "nul_string_node_boundary",
-              "left": "globalThis.result = [\"a\",\"b\"];",
-              "right": "globalThis.result = [\"a\\0StringLiteral;b\"];",
-              "same": false
-            },
-            {
-              "name": "empty_array_tree_boundary",
-              "left": "globalThis.result = [[], []];",
-              "right": "globalThis.result = [[[]]];",
-              "same": false
-            },
-            {
-              "name": "escaped_nul_equivalent_spelling",
-              "left": "globalThis.result = [\"a\\0b\"];",
-              "right": "globalThis.result = [\"a\\u0000b\"];",
-              "same": true
-            },
-            {
-              "name": "bigint_value",
-              "left": "globalThis.result = 1n;",
-              "right": "globalThis.result = 2n;",
-              "same": false
-            },
-            {
-              "name": "bigint_beyond_float_precision",
-              "left": "globalThis.result = 9007199254740992n;",
-              "right": "globalThis.result = 9007199254740993n;",
-              "same": false
-            },
-            {
-              "name": "regexp_pattern",
-              "left": "globalThis.result = /cat/.test('cat');",
-              "right": "globalThis.result = /dog/.test('cat');",
-              "same": false
-            },
-            {
-              "name": "regexp_flags",
-              "left": "globalThis.result = /a/.test('A');",
-              "right": "globalThis.result = /a/i.test('A');",
-              "same": false
-            },
-            {
-              "name": "template_text",
-              "left": "globalThis.result = `left`;",
-              "right": "globalThis.result = `right`;",
-              "same": false
-            },
-            {
-              "name": "template_prefix",
-              "left": "const value = 3; globalThis.result = `left${value}`;",
-              "right": "const value = 3; globalThis.result = `right${value}`;",
-              "same": false
-            },
-            {
-              "name": "template_tail",
-              "left": "const value = 3; globalThis.result = `prefix${value}left`;",
-              "right": "const value = 3; globalThis.result = `prefix${value}right`;",
-              "same": false
-            },
-            {
-              "name": "tagged_raw_text",
-              "left": "globalThis.result = String.raw`\\n`;",
-              "right": "globalThis.result = String.raw`\n`;",
-              "same": false
-            },
-            {
-              "name": "tagged_invalid_escapes",
-              "left": "globalThis.result = String.raw`\\u{}`;",
-              "right": "globalThis.result = String.raw`\\xG0`;",
-              "same": false
-            },
-            {
-              "name": "renamed_identifiers",
-              "left": "function original(parameter) { return parameter + 1; } globalThis.result = original(2);",
-              "right": "function a(b) { return b + 1; } globalThis.result = a(2);",
-              "same": true
-            },
-            {
-              "name": "bigint_equivalent_spelling",
-              "left": "globalThis.result = 10n;",
-              "right": "globalThis.result = 0xan;",
-              "same": true
-            },
-            {
-              "name": "regexp_flag_order",
-              "left": "globalThis.result = /a/gi.test('A');",
-              "right": "globalThis.result = /a/ig.test('A');",
-              "same": true
-            },
-            {
-              "name": "number_equivalent_spelling",
-              "left": "globalThis.result = 10;",
-              "right": "globalThis.result = 1e1;",
-              "same": true
-            },
-            {
-              "name": "string_equivalent_spelling",
-              "left": "globalThis.result = 'x';",
-              "right": "globalThis.result = '\\u0078';",
-              "same": true
-            }
-          ];
-          assert.equal(cases.length, 17);
-          const parsed = JSON.parse(execFileSync("target/debug/examples/validation_literal_fingerprints", {
-            input: JSON.stringify(cases.map(test => [test.left, test.right])),
-            encoding: "utf8",
-          }));
-          function execute(source) {
-            const context = {};
-            vm.runInNewContext(source, context, { timeout: 1000 });
-            const value = context.result;
-            return { type: typeof value, value: typeof value === "bigint" ? value.toString() : value };
-          }
-          const outcomes = cases.map((test, index) => {
-            const left = execute(test.left);
-            const right = execute(test.right);
-            assert.equal(JSON.stringify(left) === JSON.stringify(right), test.same, test.name + " runtime expectation");
-            const result = parsed[index];
-            assert.match(result.left, /^[a-f0-9]{64}$/);
-            assert.match(result.right, /^[a-f0-9]{64}$/);
-            assert.equal(result.left === result.right, test.same, test.name + " fixed fingerprint");
-            assert.equal(result.files.renamed.length, test.same ? 1 : 0, test.name + " fixed file structure match");
-            assert.equal(result.bundle.left, 1);
-            assert.equal(result.bundle.right, 1);
-            assert.equal(result.bundle.matched_by[test.same ? "structure" : "id"], 1, test.name + " fixed bundle match");
-            assert.equal(result.bundle.changed.length, test.same ? 0 : 1);
-            return { name: test.name, same_runtime_result: test.same, same_fingerprint: result.left === result.right,
-              bundle_changed: result.bundle.changed.length };
-          });
-          console.log("Fixed literal fingerprints / Node " + process.version + ": " + JSON.stringify(outcomes));
-          NODE
-      - name: Run strict all-target Clippy
-        run: cargo --config 'profile.dev.package."*".opt-level=0' clippy --locked -p craft-anything-js -p craft-anything-analysis -p craft-anything-engine --all-targets -- -D warnings
-      - name: Check repository contracts
-        run: |
-          cargo --config 'profile.dev.package."*".opt-level=0' xtask layers
-          cargo --config 'profile.dev.package."*".opt-level=0' xtask locks
-          cargo --config 'profile.dev.package."*".opt-level=0' xtask secrets
-      - name: Check all WebAssembly layers
-        run: cargo --config 'profile.dev.package."*".opt-level=0' xtask wasm
-      - name: Require formatting and an unchanged source tree
+      - name: Validate final documents
         run: |
           cargo fmt --all -- --check
+          cargo --config 'profile.dev.package."*".opt-level=0' xtask secrets
+          git diff --check 7d3dd731920f2d6158ee96c407ec6924f4b12337 HEAD
           git diff --exit-code

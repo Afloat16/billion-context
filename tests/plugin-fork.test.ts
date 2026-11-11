@@ -14,7 +14,7 @@ import type { ProxyOptions } from "../src/config.ts";
 import { SessionStore, _setStoreForTest } from "../src/persist.ts";
 import { setLogCapture } from "../src/logger.ts";
 import { _resetPluginStateForTest, forkParentRevisionLegacy, publicForkInputCheck, rememberPluginMessages, resolveConversation } from "../src/plugin.ts";
-import { _resetSessionsForTest, getSession, markDirty } from "../src/session.ts";
+import { _resetSessionsForTest, createSession, getSession, getSessionAsync, markDirty, peekSession, publishForkSession } from "../src/session.ts";
 import { _setForTest } from "../src/registry.ts";
 import { recordToolWitness, resetToolRingForTest } from "../src/tool-ring.ts";
 import { contentStoreOf } from "../src/store.ts";
@@ -624,6 +624,141 @@ test("HTTP concurrent identical forks publish once and conflicting parents canno
         assert.equal(empty.status, 201);
         assert.deepEqual((await h.request("/__bili/plugin/snapshot?conversationId=empty")).body.orderedMessages, []);
     } finally { await h.close(); }
+});
+
+test("fork publication reserves a child while its existence probe is pending", async (t) => {
+    const h = await harness();
+    const child = createSession("probe-reserved-child");
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const original = h.store.loadAsync.bind(h.store);
+    t.mock.method(h.store, "loadAsync", async (...args: Parameters<SessionStore["loadAsync"]>) => {
+        if (args[0] === child.id) await gate;
+        return original(...args);
+    });
+    const publishing = publishForkSession(child, "parent");
+    try {
+        assert.throws(() => getSession(child.id), /child fork publication in progress/);
+        await assert.rejects(getSessionAsync(child.id), /child fork publication in progress/);
+        assert.equal(peekSession(child.id), undefined, "a lookup must not publish an empty child");
+        release();
+        await publishing;
+        assert.equal(peekSession(child.id), child);
+    } finally {
+        release();
+        await publishing.catch(() => undefined);
+        await h.close();
+    }
+});
+
+test("concurrent fork publishers from different parents cannot both claim one child", async () => {
+    const h = await harness();
+    try {
+        const first = createSession("shared-publication-child");
+        const second = createSession(first.id);
+        const results = await Promise.allSettled([
+            publishForkSession(first, "first-parent"),
+            publishForkSession(second, "second-parent"),
+        ]);
+        assert.equal(results.filter((result) => result.status === "fulfilled").length, 1);
+        assert.equal(results.filter((result) => result.status === "rejected").length, 1);
+        assert.equal(peekSession(first.id), first, "the first reservation owns the published child");
+    } finally { await h.close(); }
+});
+
+test("a failed fork existence probe releases the child reservation for retry", async (t) => {
+    const h = await harness();
+    const child = createSession("retry-publication-child");
+    const original = h.store.loadAsync.bind(h.store);
+    const probe = t.mock.method(h.store, "loadAsync", async (...args: Parameters<SessionStore["loadAsync"]>) => {
+        if (args[0] === child.id) throw new Error("temporary lookup failure");
+        return original(...args);
+    });
+    try {
+        await assert.rejects(publishForkSession(child, "parent"), /temporary lookup failure/);
+        assert.equal(peekSession(child.id), undefined);
+        probe.mock.restore();
+        await publishForkSession(child, "parent");
+        assert.equal(peekSession(child.id), child);
+    } finally { await h.close(); }
+});
+
+test("a cold load begun before fork publication returns the published child", async (t) => {
+    const h = await harness();
+    const child = createSession("cold-load-publication-child");
+    child.metadata.publicationProof = "published child";
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const original = h.store.loadAsync.bind(h.store);
+    let first = true;
+    t.mock.method(h.store, "loadAsync", async (...args: Parameters<SessionStore["loadAsync"]>) => {
+        if (args[0] === child.id && first) {
+            first = false;
+            // A cold read can finish after another task publishes this id.
+            // Its snapshot was taken before that publication.
+            const beforePublication = await original(...args);
+            await gate;
+            return beforePublication;
+        }
+        return original(...args);
+    });
+    const loading = getSessionAsync(child.id);
+    try {
+        await publishForkSession(child, "parent");
+        release();
+        assert.equal(await loading, child, "an older read must not replace the published fork");
+        assert.equal(peekSession(child.id), child);
+        assert.equal(child.metadata.publicationProof, "published child");
+    } finally {
+        release();
+        await loading.catch(() => undefined);
+        await h.close();
+    }
+});
+
+test("a cold load cannot expose an empty child while fork persistence is pending", async (t) => {
+    const h = await harness();
+    const child = createSession("cold-load-persisting-child");
+    let releaseLoad!: () => void;
+    let releasePublish!: () => void;
+    let startedPersist!: () => void;
+    const loadGate = new Promise<void>((resolve) => { releaseLoad = resolve; });
+    const publishGate = new Promise<void>((resolve) => { releasePublish = resolve; });
+    const persisting = new Promise<void>((resolve) => { startedPersist = resolve; });
+    const originalLoad = h.store.loadAsync.bind(h.store);
+    const originalPersist = h.store.persistForkSession.bind(h.store);
+    let first = true;
+    t.mock.method(h.store, "loadAsync", async (...args: Parameters<SessionStore["loadAsync"]>) => {
+        if (args[0] === child.id && first) {
+            first = false;
+            const beforePublication = await originalLoad(...args);
+            await loadGate;
+            return beforePublication;
+        }
+        return originalLoad(...args);
+    });
+    t.mock.method(h.store, "persistForkSession", async (...args: Parameters<SessionStore["persistForkSession"]>) => {
+        startedPersist();
+        await publishGate;
+        return originalPersist(...args);
+    });
+    const loading = getSessionAsync(child.id);
+    const publishing = publishForkSession(child, "parent");
+    try {
+        await persisting;
+        const rejected = assert.rejects(loading, /child fork publication in progress/);
+        releaseLoad();
+        await rejected;
+        assert.equal(peekSession(child.id), undefined, "uncommitted child must stay invisible");
+        releasePublish();
+        await publishing;
+        assert.equal(peekSession(child.id), child);
+    } finally {
+        releaseLoad();
+        releasePublish();
+        await Promise.allSettled([loading, publishing]);
+        await h.close();
+    }
 });
 
 const summary = "The preserved history contains the original request and response; all key content is available through the inherited block and its stable references.";

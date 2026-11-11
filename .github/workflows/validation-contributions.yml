@@ -1,0 +1,73 @@
+name: Contribution integration validation
+on:
+  push:
+    branches: [validation/contributions-20261111]
+jobs:
+  integration:
+    name: Ten contributions with SQLite and MySQL
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: bili-test-root
+          MYSQL_DATABASE: bili
+        ports: ["3306:3306"]
+        options: >-
+          --health-cmd="mysqladmin ping -uroot -pbili-test-root"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      BILI_MYSQL_TEST_DSN: mysql://root:bili-test-root@127.0.0.1:3306/bili
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm install --ignore-scripts --no-fund --no-audit
+      - run: npm run typecheck
+      - run: npm run build
+      - name: Validate all changed components and their surrounding contracts
+        run: >-
+          node --import ./tests/preload-test-env.mjs --import tsx --test --test-reporter=tap --test-concurrency=1
+          tests/storage-integrity-cache.test.ts
+          tests/storage-media-sidecar-split.test.ts
+          tests/storage-backend-contract.test.ts
+          tests/storage-ext.test.ts
+          tests/storage-null-identity.test.ts
+          tests/media-cas.test.ts
+          tests/fork-clone-media-refcount.test.ts
+          tests/simhash-vote-range.test.ts
+          tests/prefix-affinity-simhash.test.ts
+          tests/prefix-affinity.test.ts
+          tests/fold-anchor-doctrine.test.ts
+          tests/fold-reconcile.test.ts
+          tests/chain-checkpoint-step2.test.ts
+          tests/chain-checkpoint-step3.test.ts
+          tests/plugin-fork.test.ts
+          tests/storage-mysql-seam.test.ts
+          tests/fork-replica-convergence.test.ts
+          tests/issue4982-fork-lineage-conflict.test.ts
+          tests/storage-ingest-watermark.test.ts
+          tests/storage-batched-verification.test.ts
+          tests/storage-block-bounds-preserve.test.ts
+          tests/storage-orphan-representable.test.ts
+          tests/storage-unified.test.ts
+          tests/affinity-unified-store.test.ts
+          tests/affinity-persist.test.ts
+          tests/issue3397-persona-restart-stability.test.ts
+          tests/order-persist.test.ts
+          tests/order-unified-store.test.ts
+          tests/issue2944-neutral-skeleton.test.ts
+          tests/cache-ledger.test.ts
+          tests/cache-capture-pairing.test.ts
+          tests/cache-ledger-key-switch.test.ts
+          tests/cache-ledger-effort-switch.test.ts
+          tests/cache-ledger-prompt-switch.test.ts
+          tests/cache-ledger-projection-switch.test.ts
+          tests/issue3862-context-view.test.ts
+          tests/issue1547-nonstream-cache-ledger.test.ts
+          tests/cache-capture-http.test.ts

@@ -1489,7 +1489,18 @@ export async function getSessionAsync(id: string, meta?: SessionMeta): Promise<S
     makeResidentRoom();
     let pending = pendingSessionLoads.get(id);
     if (!pending) {
-        pending = (async () => adoptOrCreate(id, meta, await store.loadAsync(id, meta)))()
+        pending = (async () => {
+            const reloaded = await store.loadAsync(id, meta);
+            // A fork may reserve or publish this id while the read is pending.
+            // Never land an older read over its authoritative resident object.
+            if (publishingForks.has(id)) throw new Error("child fork publication in progress");
+            const resident = sessions.get(id);
+            if (resident) {
+                stampExisting(resident, meta);
+                return resident;
+            }
+            return adoptOrCreate(id, meta, reloaded);
+        })()
             .finally(() => { pendingSessionLoads.delete(id); });
         pendingSessionLoads.set(id, pending);
     }
@@ -1520,9 +1531,11 @@ const publishingForks = new Set<string>();
 // backends, or a fork could silently clobber a DB-only child row.
 export async function publishForkSession(session: Session, parentId: string): Promise<void> {
     if (publishingForks.has(session.id)) throw new Error("child fork publication in progress");
-    if (sessions.has(session.id) || (await getStore().loadAsync(session.id))) throw new Error("child session already exists");
+    // Reserve before the first await, including the existence probe. Parent
+    // locks do not serialize publishers from two different conversations.
     publishingForks.add(session.id);
     try {
+        if (sessions.has(session.id) || (await getStore().loadAsync(session.id))) throw new Error("child session already exists");
         makeResidentRoom(sessionWeight(session));
         await getStore().persistForkSession(parentId, session);
         session.persisted = getStore().enabled;

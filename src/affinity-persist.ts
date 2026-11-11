@@ -219,6 +219,10 @@ export async function hydrateAffinityUnified(): Promise<void> {
         if (fileEntries.length === 0) merged = { entries: kvEntries, forks: 0 };
         else if (kvEntries.length === 0) merged = { entries: fileEntries, forks: 0 };
         else merged = mergeWithDisk(fileEntries, kvEntries);
+        // Startup hydration yields to live requests while reading the store.
+        // Reconcile that newer in-memory work before importing old carriers,
+        // using the same deeper-then-fresher rule as durable snapshot writes.
+        merged = mergeWithDisk(prefixAffinity.exportSnapshot(), merged.entries);
         if (merged.entries.length > 0) {
             const imported = prefixAffinity.importSnapshot(merged.entries);
             if (imported > 0) log("info", `[prefix-affinity] hydrated ${imported} chain(s) from unified storage (kv_store namespace "${AFF_NS}") (#5753)`);

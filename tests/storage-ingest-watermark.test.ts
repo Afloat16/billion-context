@@ -25,7 +25,7 @@ import { UnifiedStore } from "../src/storage/store.ts";
 import { UnifiedShadow } from "../src/storage/shadow.ts";
 import { openSqliteDatabase } from "../src/storage/driver.ts";
 import { planIngest, planIngestDelta, loadLegacyView, ingestSerializations, type LegacySessionLike } from "../src/storage/ingest.ts";
-import type { CoreMessage } from "acp-kernel";
+import type { CompressionBlock, CoreMessage } from "acp-kernel";
 
 process.env.BILI_PERSIST_ZSTD = "0";
 // Same hermeticity pin as the other storage suites: a developer machine with
@@ -73,6 +73,58 @@ function mkLegacy(id: string, lastMessages: LegacySessionLike["lastMessages"], p
         pluginSnapshot,
     };
 }
+
+for (const delta of [false, true]) {
+    test(`block view completion stays linear on the ${delta ? "delta" : "full"} ingest path`, () => {
+        type View = LegacySessionLike["blockContents"] extends Map<string, infer V> ? V : never;
+        class CountedViews extends Map<string, View> {
+            probes = 0;
+            override has(key: string): boolean { this.probes++; return super.has(key); }
+        }
+        const legacy = mkLegacy("many-blocks", [msg(0), msg(1)]);
+        const seed = planIngest(legacy);
+        const n = 256;
+        legacy.state.blocks = Array.from({ length: n }, (_, i): CompressionBlock => ({
+            blockId: `b${i + 1}`, runId: `r${i + 1}`, tier: 1, summary: `summary ${i}`,
+            directMessageIds: [], effectiveMessageIds: [], directBlockIds: [],
+            compressedTokens: 10, createdAt: 1_000 + i, survivedCount: 0, generation: "young", active: true,
+        }));
+        const views = new CountedViews(legacy.state.blocks.map((b) => [b.blockId, {
+            one: null, full: { text: `original ${b.blockId}`, count: 1 },
+        }]));
+        legacy.blockContents = views;
+        legacy.lastMessages!.push(msg(2));
+        const tip = seed.messages[1];
+        assert.ok(tip.contentHash);
+        const plan = delta
+            ? planIngestDelta(legacy, 1, [0, 1], { msgId: tip.msgId, contentHash: tip.contentHash }, true)
+            : planIngest(legacy);
+        assert.ok(plan);
+        assert.equal(plan.blocks.length, n);
+        assert.ok(views.probes <= 2 * n, `${views.probes} membership probes for ${n} blocks`);
+        assert.deepEqual(plan.blocks.map((b) => JSON.parse(b.summary)), legacy.state.blocks.map((b) => ({ text: `original ${b.blockId}`, count: 1 })));
+        assert.equal(views.size, n, "planning does not mutate source views");
+    });
+}
+
+test("block view completion preserves sparse originals and orphan journaling", () => {
+    const legacy = mkLegacy("sparse-blocks", [msg(0)]);
+    legacy.state.blocks = [1, 2].map((i): CompressionBlock => ({
+        blockId: `b${i}`, runId: `r${i}`, tier: 1, summary: `summary ${i}`,
+        directMessageIds: [], effectiveMessageIds: [], directBlockIds: [],
+        compressedTokens: 10, createdAt: 1_000, survivedCount: 0, generation: "young", active: true,
+    }));
+    legacy.blockContents.set("b1", { one: { text: "one", count: 1 }, full: { text: "full", count: 2 } });
+    legacy.blockContents.set("orphan", { one: null, full: { text: "retained", count: 1 } });
+    const before = structuredClone(legacy.blockContents);
+    const plan = planIngest(legacy);
+    assert.deepEqual(plan.blocks.map((b) => [JSON.parse(b.summary), b.one === null ? null : JSON.parse(b.one)]), [
+        [{ text: "full", count: 2 }, { text: "one", count: 1 }],
+        [{ text: "summary 2", count: 0 }, null],
+    ]);
+    assert.deepEqual(JSON.parse(plan.session.orphansJson!), { orphan: { one: null, full: { text: "retained", count: 1 } } });
+    assert.deepEqual(legacy.blockContents, before, "synthesized fallback views stay local to the plan");
+});
 
 interface StatsView {
     ingests: number;

@@ -39,6 +39,34 @@ function block(id: string, at: number, S: number, sigmaChars: number, startRef?:
 
 const T0 = Date.parse("2026-09-15T10:00:00Z");
 
+test("cache reports aggregate a long size bucket without an argument-limit crash or truncation", () => {
+    const session = makeSession();
+    const ledger = getCacheLedger(session);
+    const count = 200_000;
+    ledger.lines = Array.from({ length: count }, (_, i) => {
+        const hitPct = i === count - 1 ? 2.5 : 90;
+        const cached = hitPct * 100;
+        return {
+            seq: i + 1, at: T0 + i, input: 10_000, cached, output: 0,
+            hitPct, missed: 10_000 - cached, nc: 10_000 - cached, cr: 0, tr: 0, foldSeq: null,
+        };
+    });
+    ledger.sampleSeq = count;
+    ledger.agg.requests = count;
+    ledger.agg.input = count * 10_000;
+    ledger.agg.cached = (count - 1) * 9_000 + 250;
+    ledger.agg.nc = ledger.agg.input - ledger.agg.cached;
+    const report = buildSessionCacheReport(session);
+    assert.deepEqual(report.stability.sizeBuckets, [{ lo: 0, hi: 20_000, n: count, hitMedian: 90, hitMin: 2.5 }]);
+    assert.equal(report.lines.length, count, "the report retains every known sample");
+    assert.equal(report.linesOmitted, 0);
+    assert.equal(report.totals.requests, count);
+    assert.equal(report.totals.input, ledger.agg.input);
+    assert.equal(report.totals.balanced, true);
+    assert.equal(ledger.lines[0].seq, 1);
+    assert.equal(ledger.lines.at(-1)?.hitPct, 2.5, "aggregation leaves the source ledger intact");
+});
+
 test("incremental ledger closes the same identity as kernel batch", () => {
     const session = makeSession();
     withView20(session);

@@ -15,7 +15,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: Afloat16/craft-anything
-          ref: a24c45f2284fce88c4bb23486c8ae22461b97955
+          ref: 60d88da976a5fade1974650a5e99fafc9d826e80
+          fetch-depth: 4
           path: fixed
           persist-credentials: false
       - name: Install Rust
@@ -71,7 +72,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: Afloat16/craft-anything
-          ref: a24c45f2284fce88c4bb23486c8ae22461b97955
+          ref: 60d88da976a5fade1974650a5e99fafc9d826e80
+          fetch-depth: 4
           path: fixed
           persist-credentials: false
       - name: Install fixed Rust
@@ -81,6 +83,23 @@ jobs:
           cp fixed/crates/formats/tests/har_entry_budget.rs base/crates/formats/tests/har_entry_budget.rs
           (cd base && cargo +1.99.0 test --locked -p craft-anything-formats --test har_entry_budget)
           (cd fixed && cargo +1.99.0 test --locked -p craft-anything-formats --test har_entry_budget)
+      - name: Reject the earlier JSON feature regression
+        run: |
+          git -C fixed show a24c45f2284fce88c4bb23486c8ae22461b97955:crates/formats/src/har.rs > fixed/crates/formats/src/har.rs
+          git -C fixed show a24c45f2284fce88c4bb23486c8ae22461b97955:crates/formats/Cargo.toml > fixed/crates/formats/Cargo.toml
+          if (cd fixed && cargo +1.99.0 test --locked -p craft-anything-formats --test har_entry_budget serde_internal_looking_keys_remain_ordinary_capture_data) > rejected-feature.log 2>&1; then
+            cat rejected-feature.log
+            exit 1
+          fi
+          python3 - <<'PY'
+          from pathlib import Path
+          log = Path("rejected-feature.log").read_text()
+          assert "serde_internal_looking_keys_remain_ordinary_capture_data ... FAILED" in log, log
+          assert "result.entries[0].request.method.is_empty()" in log, log
+          print("Rejected raw-value feature reproduces the reserved-key semantic regression.")
+          print(log[-5000:])
+          PY
+          git -C fixed restore --source=HEAD -- Cargo.lock crates/formats/Cargo.toml crates/formats/src/har.rs
       - name: Compile the identical public reader probe
         run: |
           for directory in base fixed; do

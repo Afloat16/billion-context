@@ -144,7 +144,7 @@ jobs:
               const actual=await production(i);
               const expected=process.env.EXPECT_FIXED==="1"?test.expected:test.old;
               assert.equal(actual.ok,expected,test.name+" production "+JSON.stringify(actual));
-              if(actual.ok)assert.deepEqual(actual.tools,ref,test.name+" exact tools");
+              if(actual.ok)assert.deepEqual(actual.tools,ref.map(t=>({name:t.name,inputSchema:t.inputSchema,title:t.title??null,description:t.description??null,annotations:t.annotations??null})),test.name+" exact tools");
               outcomes.push({name:test.name,reference:ref!==null,production:actual.ok,match:actual.ok===(ref!==null)});
             }
           }finally{

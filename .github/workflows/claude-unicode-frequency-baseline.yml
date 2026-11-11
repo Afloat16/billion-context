@@ -1,0 +1,33 @@
+name: Claude Unicode frequency baseline
+on:
+  push:
+    branches: [validation/claude-unicode-frequency-baseline-20261111]
+permissions:
+  contents: read
+jobs:
+  baseline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: Afloat16/claude-mem
+          ref: 636ed78d5590792e872e1ce9bb98c747e3ffa694
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - name: Install repository dependencies
+        run: npm install --no-audit --no-fund
+      - name: Probe actual FTS tokenizer and long-query search on unchanged main
+        shell: bash
+        run: bun test tests/services/sqlite/search-fts-unicode-frequency.test.ts --timeout 30000 2>&1 | tee unicode-baseline.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: unicode-frequency-baseline
+          path: unicode-baseline.log
+          retention-days: 7

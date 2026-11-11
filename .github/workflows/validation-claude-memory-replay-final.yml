@@ -1,0 +1,64 @@
+name: Claude native replay final validation
+on:
+  push:
+    branches: [validation/claude-memory-replay-final-20261111]
+permissions:
+  contents: read
+jobs:
+  validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: Afloat16/claude-mem
+          ref: b6fcd8c2601c42754a7e473e41d5d88066542990
+          fetch-depth: 5
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - name: Isolate memory data in the runner directory
+        run: echo "CLAUDE_MEM_DATA_DIR=$RUNNER_TEMP/claude-replay-data" >> "$GITHUB_ENV"
+      - name: Install repository dependencies
+        run: npm install --no-audit --no-fund
+      - name: Verify original test-environment failures on unchanged-main production
+        shell: bash
+        run: |
+          git checkout --detach 6f8a1b80a50e3694d423ac9b90866d21cae393e6
+          set +e
+          CLAUDE_CONFIG_DIR="$RUNNER_TEMP/claude-replay-config" bun test tests/memory/memory-hook-transport.test.ts tests/memory/native-memory-bridge.test.ts --timeout 30000 2>&1 | tee "$RUNNER_TEMP/replay-harness-baseline.log"
+          result=${PIPESTATUS[0]}
+          set -e
+          test "$result" -eq 1
+          grep -F '3 fail' "$RUNNER_TEMP/replay-harness-baseline.log"
+          grep -F 'plugin/node_modules is required' "$RUNNER_TEMP/replay-harness-baseline.log"
+          grep -F '(fail) native memory lookup recognition' "$RUNNER_TEMP/replay-harness-baseline.log"
+      - name: Verify fixed source identity and focused behavior
+        run: |
+          git checkout --detach b6fcd8c2601c42754a7e473e41d5d88066542990
+          git diff --exit-code e67d298cc5990648504c10edcc1a7fed407ab0b6 HEAD -- src tests/memory tests/worker/work-view/agent-view-media.test.ts
+          bun test tests/memory/replay-fingerprint-index.test.ts
+      - name: Measure one-time index allocation and replay cost
+        run: bun tests/fixtures/memory/replay-lookup-benchmark.ts "$RUNNER_TEMP/replay-final"
+      - name: Check root and viewer TypeScript
+        run: npm run typecheck
+      - name: Build all bundles and install the generated plugin dependency closure
+        run: npm run build
+      - name: Run memory migration and projection regressions in the normal config
+        run: >-
+          bun test tests/memory
+          tests/worker/manual-memory-source-scoping.test.ts
+          tests/worker/manual-memory-after-session-delete.test.ts
+          tests/worker/http/routes/memory-ingest-routes.test.ts
+          tests/sqlite/session-store-migrations.test.ts
+          tests/sqlite/project-key-case.test.ts
+          tests/worker/work-view/agent-view-media.test.ts
+          --timeout 30000
+      - name: Check patch and lane ownership
+        run: |
+          git diff --check 308a9ab4a141ac49ca0e72bbccc0c9cdf3770ca0 HEAD
+          bun scripts/test-lanes.ts check

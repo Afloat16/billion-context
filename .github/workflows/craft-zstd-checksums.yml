@@ -1,0 +1,55 @@
+name: Prepare native Zstandard checksum regression
+on:
+  push:
+    branches: ["validation/craft-zstd-checksums-20261111"]
+permissions:
+  contents: read
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          path: validation
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: Afloat16/craft-anything
+          ref: adeddc9149b97c21e595e743c9875d84e805eece
+          path: base
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: "3.14.0"
+      - name: Generate and check native checksummed frames
+        run: python3 validation/.github/validation/zstd_checksum_native.py
+      - name: Install fixed Rust
+        run: rustup toolchain install 1.99.0 --profile minimal
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
+        with:
+          workspaces: base -> target
+          shared-key: craft-zstd-checksums-1.99
+      - name: Compile the unchanged production decoder probe
+        run: |
+          mkdir -p base/crates/formats/examples
+          cp validation/.github/validation/zstd_checksum_probe.rs base/crates/formats/examples/zstd_checksum_probe.rs
+          cd base
+          cargo +1.99.0 build --locked -p craft-anything-formats --example zstd_checksum_probe
+      - name: Record unchanged-main behavior against the native decoder
+        run: python3 validation/.github/validation/zstd_checksum_compare.py base/target/debug/examples/zstd_checksum_probe base
+      - name: Resolve the existing decoder checksum feature without updating other packages
+        working-directory: base
+        run: |
+          cp Cargo.lock Cargo.lock.original
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path("crates/formats/Cargo.toml")
+          old='ruzstd = { version = "0.9.1", default-features = false, features = ["std"] }'
+          new='ruzstd = { version = "0.9.1", default-features = false, features = ["std", "hash"] }'
+          source=p.read_text()
+          assert source.count(old)==1
+          p.write_text(source.replace(old,new))
+          PY
+          cargo +1.99.0 metadata --format-version 1 > ../resolved-cargo-metadata.json
+          python3 ../validation/.github/validation/zstd_checksum_lock.py

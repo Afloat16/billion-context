@@ -1,4 +1,4 @@
-name: Craft packet final source identity
+name: Craft packet final lower-layer identity
 on:
   push:
     branches: [validation/craft-packet-final-20261111]
@@ -26,15 +26,15 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: Afloat16/craft-anything
-          ref: 4afe199f0bb39abafe3bb2e46a8ac91dc6332207
+          ref: 8ede68574392af1cf9123a4aec179b5557689964
           path: candidate
           fetch-depth: 2
           persist-credentials: false
       - name: Verify the exact tested product and current-main replay
         run: |
-          git fetch --no-tags --depth=1 origin 041a9bed1f3041647036ea36ef3e67a6e0cd12a5
-          git fetch --no-tags --depth=1 origin adeddc9149b97c21e595e743c9875d84e805eece
-          git fetch --no-tags --depth=1 origin b171ee291d98b86c137e2e02093fc181bd96db52
+          git fetch --no-tags --depth=1 origin 86d047cbc5368ca595c83e045893fb39c7f3f7f8
+          git fetch --no-tags --depth=1 origin 06342656204c5ef25d145ec632468914d2a2982e
+          git fetch --no-tags --depth=1 origin 46c531c9d21c2dab35f2ae62d22c72786b931ea2
           python3 "$GITHUB_WORKSPACE/validation/.github/validation/packet_final_identity.py"
       - name: Install fixed CI formatting toolchain
         run: |
@@ -48,6 +48,6 @@ jobs:
           cargo --config 'profile.dev.package."*".opt-level=0' xtask secrets
       - name: Check patch whitespace and clean checkout
         run: |
-          git diff --check 041a9bed1f3041647036ea36ef3e67a6e0cd12a5 HEAD
+          git diff --check 86d047cbc5368ca595c83e045893fb39c7f3f7f8 HEAD
           git diff --exit-code
           test -z "$(git ls-files --others --exclude-standard)"

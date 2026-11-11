@@ -1,0 +1,102 @@
+name: HTML legacy script MIME validation
+
+on:
+  push:
+    branches: [validation/craft-html-script-mime-20261111]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  script-mime:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      CARGO_INCREMENTAL: "0"
+      CARGO_BUILD_JOBS: "2"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+      CARGO_PROFILE_DEV_OPT_LEVEL: "0"
+      CARGO_TERM_COLOR: never
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: Afloat16/craft-anything
+          ref: 7116cc6cb486ada87497de2568c6b6db5a2ea783
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install Rust
+        run: |
+          rustup toolchain install 1.99.0 --profile minimal --component rustfmt --component clippy --target wasm32-unknown-unknown
+          rustup default 1.99.0
+          rustc --version
+          node --version
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
+        with:
+          key: craft-html-script-mime-v1
+          save-if: true
+          cache-on-failure: true
+      - name: Compare original script inventory with Chromium execution
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/craft-mime-chromium
+        run: |
+          npm install --prefix "$RUNNER_TEMP/craft-mime-browser" --ignore-scripts --no-audit --no-fund playwright@1.65.0
+          node "$RUNNER_TEMP/craft-mime-browser/node_modules/playwright/cli.js" install chromium
+          mkdir -p crates/js/examples
+          trap 'rm -f crates/js/examples/validation_script_mime.rs' EXIT
+          cat > crates/js/examples/validation_script_mime.rs <<'RUST'
+          use std::io::Read;
+          
+          fn main() {
+              let mut source = String::new();
+              std::io::stdin().read_to_string(&mut source).unwrap();
+              println!("{}", serde_json::to_string(&craft_anything_js::html::scan_html(&source)).unwrap());
+          }
+          RUST
+          cargo --config 'profile.dev.package."*".opt-level=0' build --locked -p craft-anything-js --example validation_script_mime
+          node <<'NODE'
+          const assert = require("node:assert/strict");
+          const path = require("node:path");
+          const { execFileSync } = require("node:child_process");
+          const { chromium } = require(path.join(process.env.RUNNER_TEMP, "craft-mime-browser/node_modules/playwright"));
+          const valid = [
+            "application/ecmascript", "application/javascript", "application/x-ecmascript", "application/x-javascript",
+            "text/ecmascript", "text/javascript",
+            ...Array.from({ length: 6 }, (_, n) => "text/javascript1." + n),
+            "text/jscript", "text/livescript", "text/x-ecmascript", "text/x-javascript",
+          ];
+          const invalid = [
+            "text/javascript1", "text/javascript1.6", "text/javascript1evil",
+            "application/javascript1.0", "application/ecmascript1.0", "application/x-javascript1.0",
+            "application/x-ecmascript1.0", "text/ecmascript1.0", "text/x-javascript1.0", "text/x-ecmascript1.0",
+          ];
+          const cases = [...valid, ...invalid];
+          const html = "<!doctype html><script>globalThis.executed = [];</script>" +
+            cases.map((type, index) => '<script type="' + type + '">globalThis.executed.push(' + index + ');</script>').join("\n");
+          const scan = JSON.parse(execFileSync("target/debug/examples/validation_script_mime", { input: html, encoding: "utf8" }));
+          const scannerIds = scan.scripts.flatMap(script => {
+            if (!script.inline) return [];
+            const content = html.slice(script.inline[0], script.inline[1]);
+            const match = content.match(/^globalThis\.executed\.push\((\d+)\);$/);
+            return match ? [Number(match[1])] : [];
+          });
+          (async () => {
+            const browser = await chromium.launch({ headless: true });
+            try {
+              const page = await browser.newPage();
+              await page.setContent(html, { waitUntil: "load" });
+              const actual = await page.evaluate(() => globalThis.executed);
+              assert.deepEqual(actual, valid.map((_, index) => index));
+              assert.deepEqual(scannerIds, cases.map((_, index) => index));
+              const mismatches = scannerIds.filter(index => !actual.includes(index));
+              assert.equal(mismatches.length, 10);
+              console.log("Baseline MIME classification / Chromium " + browser.version() + " / Node " + process.version + ": " +
+                JSON.stringify({ browser_executed: actual.length, scanner_scripts: scannerIds.length, false_script_types: mismatches.map(index => cases[index]) }));
+            } finally {
+              await browser.close();
+            }
+          })().catch(error => { console.error(error); process.exitCode = 1; });
+          NODE
+      - name: Require an unchanged source tree
+        run: git diff --exit-code

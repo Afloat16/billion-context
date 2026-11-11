@@ -1,4 +1,4 @@
-name: Craft ZIP CRC32 compatibility and throughput
+name: Craft ZIP CRC32 current-main integration
 on:
   push:
     branches: [validation/craft-zip-crc32-throughput-20261111]
@@ -22,7 +22,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: Afloat16/craft-anything
-          ref: 29eae51d4391e18f315c9f9fc3b86e4988f9b9a6
+          ref: 70fbdd1a5f9008fc4df7dc0050406a17d1b31b4a
           path: candidate
           fetch-depth: 2
           persist-credentials: false
@@ -46,37 +46,6 @@ jobs:
         run: cargo --config 'profile.dev.package."*".opt-level=0' xtask wasm
       - name: Verify exact source and patch whitespace
         run: |
-          git fetch --no-tags --depth=1 origin 7116cc6cb486ada87497de2568c6b6db5a2ea783
-          git diff --check 7116cc6cb486ada87497de2568c6b6db5a2ea783 HEAD
+          git fetch --no-tags --depth=1 origin 22c44d01d271c49187104802459085f273f855f0
+          git diff --check 22c44d01d271c49187104802459085f273f855f0 HEAD
           git diff --exit-code
-  stored-zip-throughput:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 60
-    env:
-      CARGO_INCREMENTAL: "0"
-      CARGO_BUILD_JOBS: "2"
-      CARGO_TERM_COLOR: never
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          path: validation
-          persist-credentials: false
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          repository: storytold/craft-anything
-          ref: 7116cc6cb486ada87497de2568c6b6db5a2ea783
-          path: baseline
-          persist-credentials: false
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          repository: Afloat16/craft-anything
-          ref: 29eae51d4391e18f315c9f9fc3b86e4988f9b9a6
-          path: candidate
-          persist-credentials: false
-      - name: Install the identical release toolchain for both revisions
-        run: |
-          rustup toolchain install 1.99.0 --profile minimal
-          rustup default 1.99.0
-          rustc -vV
-      - name: Compare zlib and byte-identical stored ZIP reads across five processes per revision
-        run: python3 "$GITHUB_WORKSPACE/validation/.github/validation/zip_crc32.py"

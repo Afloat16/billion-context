@@ -1,0 +1,38 @@
+name: Claude merge Windows acceptance comparison
+on:
+  push:
+    branches: [validation/claude-merge-windows-20261111]
+permissions:
+  contents: read
+jobs:
+  windows:
+    name: Windows deep search on ${{ matrix.label }}
+    runs-on: windows-2022
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: main-6b779c0
+            ref: 6b779c06796138aeb4b0ee2fa7dbd25912e4f7fb
+          - label: merge-cb6d2ef
+            ref: cb6d2ef0bc0c954d8d5bbda29489bcbe93176f65
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: Afloat16/claude-mem
+          ref: ${{ matrix.ref }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - run: npm install --no-audit --no-fund
+      - run: npm run build
+      - name: Unchanged deep-search subprocess and release acceptance
+        shell: pwsh
+        run: |
+          bun test tests/worker/deep-search-client.test.ts tests/worker/deep-search-snapshot.test.ts tests/integration/deep-search-guard-faults.test.ts tests/integration/deep-search-process.test.ts tests/integration/deep-search-packaging.test.ts tests/integration/deep-search-release-e2e.test.ts tests/integration/context-bundle-environment.test.ts tests/integration/worker-binary-build.test.ts --timeout 120000
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

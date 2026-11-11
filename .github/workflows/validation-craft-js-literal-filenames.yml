@@ -23,7 +23,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: Afloat16/craft-anything
-          ref: 3d34220ad446d035abe00566bddcff128a8775f1
+          ref: 29480f71034cee9db8ad54f036a10971273e55e6
           fetch-depth: 0
           persist-credentials: false
       - name: Install Rust and inspect Node
@@ -47,7 +47,7 @@ jobs:
           path = pathlib.Path("crates/analysis/src/js_app.rs")
           fixed = path.read_bytes()
           try:
-              path.write_bytes(subprocess.check_output(["git", "show", "2cee4610f07164920ca9f02cd75cd84fa99cba3b:" + path.as_posix()]))
+              path.write_bytes(subprocess.check_output(["git", "show", "80479a9b9e07babe1a7a96252784cba9c9c31451:" + path.as_posix()]))
               command = ["cargo", "--config", 'profile.dev.package."*".opt-level=0', "test", "--locked",
                          "-p", "craft-anything-analysis", "--test", "commonjs_literal_filenames", "--", "--nocapture"]
               result = subprocess.run(command, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)

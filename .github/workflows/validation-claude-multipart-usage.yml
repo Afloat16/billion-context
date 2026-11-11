@@ -1,24 +1,58 @@
-name: Claude SDK multipart usage protocol
+name: Claude assistant step usage validation
 on:
   push:
     branches: [validation/claude-multipart-usage-20261111]
 permissions:
   contents: read
 jobs:
-  native-protocol:
+  step-usage:
     runs-on: ubuntu-24.04
-    timeout-minutes: 8
+    timeout-minutes: 35
+    defaults:
+      run:
+        working-directory: candidate
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
+          path: validation
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: Afloat16/claude-mem
+          ref: c1ef17789fdb163e9ceeca9cb90bd32a205a9089
+          path: candidate
+          fetch-depth: 2
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-      - name: Install the declared SDK version in an isolated probe directory
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.4"
+      - name: Install repository dependencies
+        run: npm install --no-audit --no-fund
+      - name: Verify the actual installed SDK multipart usage protocol
         run: |
-          mkdir -p "$RUNNER_TEMP/claude-sdk-probe"
-          cp .github/validation/claude-multipart-usage-probe.mjs "$RUNNER_TEMP/claude-sdk-probe/probe.mjs"
-          npm install --prefix "$RUNNER_TEMP/claude-sdk-probe" --ignore-scripts --no-audit --no-fund --package-lock=false @anthropic-ai/claude-agent-sdk@0.3.172
-      - name: Observe actual SDK and bundled CLI frames from owned localhost SSE
-        run: node "$RUNNER_TEMP/claude-sdk-probe/probe.mjs"
+          cp "$GITHUB_WORKSPACE/validation/.github/validation/claude-multipart-usage-probe.mjs" validation-native-usage.mjs
+          node validation-native-usage.mjs
+          rm validation-native-usage.mjs
+      - name: Compare original and fixed real SQLite regressions
+        run: |
+          mkdir -p "$RUNNER_TEMP/claude-step-usage-data"
+          export CLAUDE_MEM_DATA_DIR="$RUNNER_TEMP/claude-step-usage-data"
+          export NO_COLOR=1
+          python3 "$GITHUB_WORKSPACE/validation/.github/validation/claude-step-usage-compare.py"
+      - name: Run all Claude worker and shared usage regressions
+        run: |
+          mkdir -p "$RUNNER_TEMP/claude-step-usage-related"
+          export CLAUDE_MEM_DATA_DIR="$RUNNER_TEMP/claude-step-usage-related"
+          bun test --timeout 30000 tests/worker/claude-*.test.ts tests/worker/observer-usage-visibility.test.ts
+      - name: Check root and viewer TypeScript
+        run: npm run typecheck
+      - name: Build all distribution bundles
+        run: node scripts/build-hooks.js
+      - name: Check test lanes and patch whitespace
+        run: |
+          npm run test:lanes:check
+          git diff --check 51ecfbe540b634f77eaa52e469b9bedadfd6b1e0 HEAD
+          git diff --exit-code -- src tests

@@ -442,16 +442,60 @@ function jcsKeyCompare(a: string, b: string): number {
 }
 
 export function jcsStringify(value: unknown): string {
-    if (value === null || typeof value === "boolean") return JSON.stringify(value);
-    if (typeof value === "number") return Object.is(value, -0) ? "-0" : JSON.stringify(value);
-    if (typeof value === "string") return JSON.stringify(value);
-    if (Array.isArray(value)) return "[" + value.map(jcsStringify).join(",") + "]";
-    if (typeof value === "object") {
-        const obj = value as Record<string, unknown>;
-        const keys = Object.keys(obj).sort(jcsKeyCompare);
-        return "{" + keys.map((k) => JSON.stringify(k) + ":" + jcsStringify(obj[k])).join(",") + "}";
+    type Frame =
+        | { kind: "value"; value: unknown }
+        | { kind: "array"; value: unknown[]; index: number; length: number }
+        | { kind: "object"; value: Record<string, unknown>; index: number; keys: string[] };
+    const stack: Frame[] = [{ kind: "value", value }];
+    const parts: string[] = [];
+    const ancestors = new Set<object>();
+    // Keep one continuation per open container, instead of recursing or
+    // queueing every child of a wide array. Canonical bytes stay unchanged.
+    while (stack.length > 0) {
+        const frame = stack.pop()!;
+        if (frame.kind === "array") {
+            if (frame.index === frame.length) {
+                parts.push("]");
+                ancestors.delete(frame.value);
+                continue;
+            }
+            const index = frame.index++;
+            if (index > 0) parts.push(",");
+            stack.push(frame);
+            // Array.map skips holes; preserve that historical encoding.
+            if (index in frame.value) stack.push({ kind: "value", value: frame.value[index] });
+        } else if (frame.kind === "object") {
+            if (frame.index === frame.keys.length) {
+                parts.push("}");
+                ancestors.delete(frame.value);
+                continue;
+            }
+            const key = frame.keys[frame.index++]!;
+            if (frame.index > 1) parts.push(",");
+            parts.push(JSON.stringify(key), ":");
+            stack.push(frame, { kind: "value", value: frame.value[key] });
+        } else {
+            const current = frame.value;
+            if (current !== null && typeof current === "object") {
+                if (ancestors.has(current)) throw new TypeError("Cannot canonicalize a circular structure");
+                ancestors.add(current);
+                if (Array.isArray(current)) {
+                    parts.push("[");
+                    stack.push({ kind: "array", value: current, index: 0, length: current.length });
+                } else {
+                    parts.push("{");
+                    stack.push({ kind: "object", value: current as Record<string, unknown>, index: 0, keys: Object.keys(current).sort(jcsKeyCompare) });
+                }
+            } else if (typeof current === "number") {
+                parts.push(Object.is(current, -0) ? "-0" : JSON.stringify(current));
+            } else if (current === null || typeof current === "boolean" || typeof current === "string") {
+                parts.push(JSON.stringify(current));
+            } else {
+                parts.push("null");
+            }
+        }
     }
-    return "null";
+    return parts.join("");
 }
 
 export function computeRequestDigest(parsed: unknown, wire: WireProtocol): string {

@@ -19,6 +19,7 @@ import {
     jcsStringify,
     parseChainCheckpoint,
     renderChainCheckpoint,
+    stampOutbound,
     type ChainCheckpoint,
 } from "../src/chain-checkpoint.ts";
 
@@ -85,6 +86,31 @@ test("jcs: key-order invariant, array order preserved, RFC 8785 number/string fo
     // V8 does not escape non-BMP characters in JSON.stringify, so build the
     // expected string from the code point itself.
     assert.equal(jcsStringify(obj), `{"\\ud801":1,"${String.fromCodePoint(0x10000)}":2}`);
+});
+
+test("jcs: deeply nested serializable JSON can be stamped and verified", () => {
+    for (const [open, close] of [["{\"child\":", "}"], ["[", "]"]]) {
+        const raw = open.repeat(3000) + "0" + close.repeat(3000);
+        const nested: unknown = JSON.parse(raw);
+        assert.equal(JSON.stringify(nested), raw, "fixture is within native stringify depth");
+        assert.equal(jcsStringify(nested), raw);
+        const body = { model: "m", messages: [{ role: "user", content: "hello" }], metadata: { nested } };
+        const stamped = stampOutbound(body, "openai", "deep-test", T0);
+        assert.ok(stamped);
+        assert.equal(evaluateChain(stamped, "openai", { nowMs: T0 }).verdict, "valid");
+        assert.equal(computeRequestDigest(stamped, "openai"), computeRequestDigest(body, "openai"));
+    }
+});
+
+test("jcs: shared values and sparse arrays retain canonical bytes", () => {
+    const shared = { z: undefined, a: -0 };
+    const sparse = Array<unknown>(3);
+    sparse[1] = undefined;
+    assert.equal(jcsStringify({ b: shared, a: shared, sparse }),
+        '{"a":{"a":-0,"z":null},"b":{"a":-0,"z":null},"sparse":[,null,]}');
+    const cycle: { self?: unknown } = {};
+    cycle.self = cycle;
+    assert.throws(() => jcsStringify(cycle));
 });
 
 test("carrier contract: strict whole-content match in the trailing user run only", () => {

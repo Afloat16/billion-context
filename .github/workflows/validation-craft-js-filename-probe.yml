@@ -1,0 +1,74 @@
+name: CommonJS filename contract probe
+
+on:
+  push:
+    branches: [validation/craft-js-filename-probe-20261111]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  node-file-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check literal file paths and ESM URL paths with Node
+        run: |
+          node --version
+          node <<'NODE'
+          const assert = require("node:assert/strict");
+          const fs = require("node:fs");
+          const os = require("node:os");
+          const path = require("node:path");
+          const { createRequire } = require("node:module");
+          const { pathToFileURL, fileURLToPath } = require("node:url");
+          (async () => {
+            const root = fs.mkdtempSync(path.join(os.tmpdir(), "craft-filename-probe-"));
+            try {
+              const write = (name, content) => {
+                const full = path.join(root, name);
+                fs.mkdirSync(path.dirname(full), { recursive: true });
+                fs.writeFileSync(full, content);
+              };
+              const req = createRequire(path.join(root, "driver.cjs"));
+              const results = [];
+              for (const suffix of ["#release", "?raw"]) {
+                const file = "worker" + suffix + ".js";
+                write("worker.js", 'module.exports = "wrong-stripped-file";');
+                write(file, "module.exports = " + JSON.stringify(file) + ";");
+                for (const spec of ["./" + file, "./worker" + suffix]) {
+                  assert.equal(path.relative(root, req.resolve(spec)), file);
+                  assert.equal(req(spec), file);
+                  results.push({ kind: "require", spec, resolved: file });
+                }
+                const nested = "dir" + suffix + "/child.js";
+                write(nested, "module.exports = " + JSON.stringify(nested) + ";");
+                assert.equal(path.relative(root, req.resolve("./" + nested)), nested);
+                assert.equal(req("./" + nested), nested);
+                results.push({ kind: "require-nested", resolved: nested });
+                const pkg = suffix[0] === "#" ? "hash-package" : "query-package";
+                write(pkg + "/package.json", JSON.stringify({ main: "entry" + suffix + ".js" }));
+                write(pkg + "/entry.js", 'module.exports = "wrong-package-entry";');
+                write(pkg + "/entry" + suffix + ".js", 'module.exports = "literal-package-entry";');
+                assert.equal(path.relative(root, req.resolve("./" + pkg)), pkg + "/entry" + suffix + ".js");
+                assert.equal(req("./" + pkg), "literal-package-entry");
+                results.push({ kind: "package-main", resolved: pkg + "/entry" + suffix + ".js" });
+              }
+              write("missing.js", 'module.exports = "must-not-be-used";');
+              assert.throws(() => req.resolve("./missing#absent"), { code: "MODULE_NOT_FOUND" });
+              assert.throws(() => req.resolve("./missing?absent"), { code: "MODULE_NOT_FOUND" });
+              results.push({ kind: "missing-literal", resolved: null });
+              write("plain.mjs", "export default import.meta.url;");
+              const url = pathToFileURL(path.join(root, "plain.mjs")).href + "?build=2#part";
+              const loaded = await import(url);
+              assert.equal(loaded.default, url);
+              assert.equal(fileURLToPath(loaded.default), path.join(root, "plain.mjs"));
+              results.push({ kind: "esm-url", file: path.basename(fileURLToPath(loaded.default)), query: new URL(loaded.default).search, hash: new URL(loaded.default).hash });
+              console.log(JSON.stringify({ node: process.version, passed: results.length, results }, null, 2));
+            } finally {
+              fs.rmSync(root, { recursive: true, force: true });
+            }
+          })().catch(error => { console.error(error); process.exitCode = 1; });
+          
+          NODE

@@ -23,7 +23,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: Afloat16/craft-anything
-          ref: b6ba499be2fddc38007dc5913e05dd30714e5432
+          ref: 7dc5e9191c7d09abb3eb5c37d4cd36544410a168
           fetch-depth: 0
           persist-credentials: false
       - name: Install the validated Rust toolchain
@@ -39,41 +39,57 @@ jobs:
           cache-on-failure: true
       - name: Check formatting
         run: cargo fmt --all -- --check
-      - name: Verify unchanged-source regression failures and control
+      - name: Verify original and previous-head regression failures and controls
         run: |
           python3 - <<'PY'
           import pathlib
           import subprocess
           source = pathlib.Path("crates/js/src/bundle.rs")
           fixed = source.read_bytes()
+          original_failures = [
+              "repeated_module_keys_keep_only_the_final_function",
+              "a_later_nonfunction_or_accessor_replaces_an_earlier_module",
+              "accessors_are_not_recovered_as_module_bodies",
+              "prototype_setters_do_not_hide_or_create_own_module_entries",
+              "unknown_property_writes_leave_only_later_known_entries",
+              "browserify_keeps_final_module_and_dependency_definitions",
+              "esbuild_accessors_are_not_module_initializers",
+              "browserify_nonmodule_replacements_remove_older_functions",
+              "browserify_dependency_maps_keep_only_final_known_data_values",
+              "a_shorthand_definition_can_replace_a_previous_module",
+              "unknown_browserify_table_writes_report_incomplete_recovery",
+              "unknown_browserify_dependency_writes_report_incomplete_recovery",
+              "object_property_budget_counts_known_nonmodule_values",
+              "browserify_dependency_property_budget_is_reported",
+              "repeated_definitions_of_one_key_do_not_exhaust_the_property_budget",
+          ]
+          review_failures = [
+              "unknown_property_writes_leave_only_later_known_entries",
+              "unknown_browserify_table_writes_report_incomplete_recovery",
+              "unknown_browserify_dependency_writes_report_incomplete_recovery",
+              "object_property_budget_counts_known_nonmodule_values",
+              "browserify_dependency_property_budget_is_reported",
+          ]
           try:
-              original = subprocess.check_output(["git", "show", "2cee4610f07164920ca9f02cd75cd84fa99cba3b:crates/js/src/bundle.rs"])
-              source.write_bytes(original)
-              result = subprocess.run(
-                  ["cargo", "--config", 'profile.dev.package."*".opt-level=0', "test", "--locked", "-p", "craft-anything-js",
-                   "--test", "bundle_object_properties", "--", "--test-threads=1"],
-                  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
-              )
-              print(result.stdout, flush=True)
-              failures = [
-                  "repeated_module_keys_keep_only_the_final_function",
-                  "a_later_nonfunction_or_accessor_replaces_an_earlier_module",
-                  "accessors_are_not_recovered_as_module_bodies",
-                  "prototype_setters_do_not_hide_or_create_own_module_entries",
-                  "unknown_property_writes_leave_only_later_known_entries",
-                  "browserify_keeps_final_module_and_dependency_definitions",
-                  "esbuild_accessors_are_not_module_initializers",
-                  "browserify_nonmodule_replacements_remove_older_functions",
-                  "browserify_dependency_maps_keep_only_final_known_data_values",
-                  "a_shorthand_definition_can_replace_a_previous_module",
-              ]
-              if result.returncode == 0 or "test result: FAILED. 1 passed; 10 failed;" not in result.stdout:
-                  raise SystemExit("Expected ten semantic failures and the distinct-data-property control to pass")
-              for name in failures:
-                  if "test " + name + " ... FAILED" not in result.stdout:
-                      raise SystemExit("Missing expected semantic failure: " + name)
-              if "test distinct_data_properties_keep_their_modules ... ok" not in result.stdout:
-                  raise SystemExit("The ordinary data-property control did not pass")
+              for revision, controls, failures in [
+                  ("2cee4610f07164920ca9f02cd75cd84fa99cba3b", 1, original_failures),
+                  ("b6ba499be2fddc38007dc5913e05dd30714e5432", 11, review_failures),
+              ]:
+                  print("Regression baseline: " + revision, flush=True)
+                  original = subprocess.check_output(["git", "show", revision + ":crates/js/src/bundle.rs"])
+                  source.write_bytes(original)
+                  result = subprocess.run(
+                      ["cargo", "--config", 'profile.dev.package."*".opt-level=0', "test", "--locked", "-p", "craft-anything-js",
+                       "--test", "bundle_object_properties", "--", "--test-threads=1"],
+                      stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                  )
+                  print(result.stdout, flush=True)
+                  summary = "test result: FAILED. " + str(controls) + " passed; " + str(len(failures)) + " failed;"
+                  if result.returncode == 0 or summary not in result.stdout:
+                      raise SystemExit("Unexpected regression/control result for " + revision)
+                  for name in failures:
+                      if "test " + name + " ... FAILED" not in result.stdout:
+                          raise SystemExit("Missing expected semantic failure: " + name)
           finally:
               source.write_bytes(fixed)
           PY
@@ -105,7 +121,7 @@ jobs:
             assert.equal(run.status, 0, run.stderr);
             const result = JSON.parse(run.stdout);
             assert.equal(result.facts.parse_errors, 0);
-            return result.bundle.modules;
+            return result.bundle;
           }
           const ordinary = Array.from({ length: 10 }, (_, i) => (i + 1) + ":function(e){e.exports=" + (i + 1) + "}").join(",");
           const prefix = Array.from({ length: 9 }, (_, i) => (i + 1) + ":function(e){e.exports=" + (i + 1) + "}").join(",");
@@ -134,8 +150,10 @@ jobs:
           }
           for (const [name, table, ids] of cases) {
             const source = "(self.webpackChunkx=self.webpackChunkx||[]).push([[1]," + table + "]);";
-            const modules = analyze(source);
+            const bundle = analyze(source);
+            const modules = bundle.modules;
             assert.deepEqual(modules.map(module => module.id), ids, name);
+            assert.equal(bundle.truncated, name === "spread" || name === "unknown-key", name + ": completeness");
             const self = { webpackChunkx: [] };
             const more = Object.fromEntries(Array.from({ length: 9 }, (_, i) => [String(i + 1), 37]));
             new Function("self", "more", "dynamic", source)(self, more, "1");
@@ -151,8 +169,10 @@ jobs:
           }
           const source = "var modules={1:[function(r,m,e){m.exports=r('item')},{item:2,item:3}],1:[function(r,m,e){m.exports=r('item')},{item:4,item:5}],5:[function(r,m,e){m.exports=37},{}]};";
           const original = new Function(source + ";return modules;")();
-          const modules = analyze(source);
+          const bundle = analyze(source);
+          const modules = bundle.modules;
           assert.deepEqual(modules.map(module => module.id), ["1", "5"]);
+          assert.equal(bundle.truncated, false);
           for (const module of modules) {
             const entry = original[module.id];
             const observe = fn => {
@@ -166,7 +186,9 @@ jobs:
           console.log("Node and production analyzer agree: browserify duplicate modules and mappings");
           for (const property of ["get 'src/item.js'(){return function(e,m){m.exports=37}}", "set 'src/item.js'(e){}"]) {
             const source = "var item=__commonJS({" + property + "});";
-            assert.deepEqual(analyze(source), []);
+            const bundle = analyze(source);
+            assert.deepEqual(bundle.modules, []);
+            assert.equal(bundle.truncated, false);
             let object;
             new Function("__commonJS", source)(value => { object = value; });
             const descriptor = Object.getOwnPropertyDescriptor(object, "src/item.js");

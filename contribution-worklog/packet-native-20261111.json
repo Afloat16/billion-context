@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "product_head": "b171ee291d98b86c137e2e02093fc181bd96db52",
+  "product_base": "adeddc9149b97c21e595e743c9875d84e805eece",
+  "libpcap_sha": "bbcbc9174df3298a854daee2b3e666a4b6e5383a",
+  "libpcap_tag": "libpcap-1.10.5",
+  "state": "validation_pending",
+  "actual_tshark_run": false,
+  "scope": "Fixed official libpcap writes classic pcap and independently reads classic/generated pcapng; exact bytes, lengths, timestamps, link type and readable prefix checked. Real existing packet/inventory/process limits remain in separate 13-case core suite.",
+  "expected_baseline": "3 failures / 2 controls",
+  "expected_fixed": "5 passes"
+}

@@ -1,0 +1,62 @@
+name: Craft packet native file comparison
+on:
+  push:
+    branches: [validation/craft-packet-libpcap-20261111]
+permissions:
+  contents: read
+jobs:
+  native:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    defaults:
+      run:
+        working-directory: candidate
+    env:
+      CARGO_INCREMENTAL: "0"
+      CARGO_BUILD_JOBS: "2"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+      CARGO_PROFILE_DEV_OPT_LEVEL: "0"
+      CARGO_TERM_COLOR: never
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          path: validation
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: Afloat16/craft-anything
+          ref: b171ee291d98b86c137e2e02093fc181bd96db52
+          path: candidate
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: the-tcpdump-group/libpcap
+          ref: bbcbc9174df3298a854daee2b3e666a4b6e5383a
+          path: native-libpcap
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Build fixed libpcap with file-only capture support
+        run: |
+          cmake -S "$GITHUB_WORKSPACE/native-libpcap" -B "$RUNNER_TEMP/libpcap-build" -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DPCAP_TYPE=null -DENABLE_REMOTE=OFF -DBUILD_WITH_LIBNL=OFF -DDISABLE_LINUX_USBMON=ON -DDISABLE_BLUETOOTH=ON -DDISABLE_NETMAP=ON -DDISABLE_DPDK=ON -DDISABLE_DBUS=ON -DDISABLE_RDMA=ON -DDISABLE_DAG=ON -DDISABLE_SEPTEL=ON -DDISABLE_SNF=ON -DDISABLE_TC=ON
+          cmake --build "$RUNNER_TEMP/libpcap-build" --target pcap_static -j2
+          cc -std=c99 -D_DEFAULT_SOURCE -Wall -Wextra -Werror -I"$GITHUB_WORKSPACE/native-libpcap" -I"$RUNNER_TEMP/libpcap-build" "$GITHUB_WORKSPACE/validation/.github/validation/packet_libpcap.c" "$RUNNER_TEMP/libpcap-build/libpcap.a" -o "$RUNNER_TEMP/packet-file-oracle"
+          "$RUNNER_TEMP/packet-file-oracle" --version
+      - name: Write classic files and verify native packet bytes and error boundaries
+        run: |
+          echo "PACKET_VALIDATION_FIXTURES=$RUNNER_TEMP/packet-fixtures" >> "$GITHUB_ENV"
+          PACKET_NATIVE_HELPER="$RUNNER_TEMP/packet-file-oracle" PACKET_VALIDATION_FIXTURES="$RUNNER_TEMP/packet-fixtures" python3 "$GITHUB_WORKSPACE/validation/.github/validation/packet_native_fixtures.py"
+      - name: Install fixed CI Rust
+        run: |
+          rustup toolchain install 1.99.0 --profile minimal
+          rustup default 1.99.0
+      - name: Compare original and fixed consumers on native-verified capture files
+        run: |
+          git fetch --no-tags --depth=1 origin adeddc9149b97c21e595e743c9875d84e805eece
+          python3 "$GITHUB_WORKSPACE/validation/.github/validation/packet_compare.py" native
+      - name: Verify fixed source and clean checkout
+        run: |
+          git diff --check adeddc9149b97c21e595e743c9875d84e805eece HEAD
+          git diff --exit-code
+          test -z "$(git ls-files --others --exclude-standard)"

@@ -1,4 +1,4 @@
-name: Frida process-column baseline
+name: Frida process-column full validation
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
 jobs:
   frida-columns:
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 75
     env:
       CARGO_INCREMENTAL: "0"
       CARGO_BUILD_JOBS: "2"
@@ -23,23 +23,59 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: Afloat16/craft-anything
-          ref: 3ce1ce9f52077a53811be8a0309fdbe85b16b417
+          ref: 3657077dd0bd001711d0126778d1880640b4d59f
           fetch-depth: 0
           persist-credentials: false
+      - name: Install Rust
+        run: |
+          rustup toolchain install 1.99.0 --profile minimal --component rustfmt --component clippy --target wasm32-unknown-unknown
+          rustup default 1.99.0
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
+        with:
+          key: craft-frida-process-columns-full-v1
+          save-if: true
+          cache-on-failure: true
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Reproduce original public-parser column errors
+        run: |
+          python3 - <<'PY'
+          import pathlib
+          import subprocess
+          path = pathlib.Path("crates/engines/src/frida.rs")
+          fixed = path.read_bytes()
+          failures = {
+              "process_names_keep_dotted_suffixes_without_identifiers",
+              "process_names_keep_repeated_spaces_and_tabs",
+              "application_identifiers_come_from_the_header_even_without_dots",
+              "a_short_application_row_does_not_invent_an_identifier",
+              "a_later_process_header_clears_the_application_column",
+              "headerless_rows_keep_names_without_guessing_application_identifiers",
+              "separator_widths_handle_headers_wider_than_their_data_columns",
+          }
+          try:
+              path.write_bytes(subprocess.check_output(["git", "show", "3ce1ce9f52077a53811be8a0309fdbe85b16b417:" + path.as_posix()]))
+              result = subprocess.run(
+                  ["cargo", "--config", 'profile.dev.package."*".opt-level=0', "test", "--locked",
+                   "-p", "craft-anything-engines", "--test", "frida_process_columns", "--", "--nocapture"],
+                  text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+              )
+              print(result.stdout, end="")
+              if result.returncode == 0 or "test result: FAILED. 4 passed; 7 failed;" not in result.stdout:
+                  raise SystemExit("Expected seven process-table regressions and four controls on the unchanged parser")
+              listed = result.stdout.rsplit("failures:", 1)[-1].split("test result:", 1)[0]
+              actual = {line.strip() for line in listed.splitlines() if line.strip()}
+              assert actual == failures, actual
+          finally:
+              path.write_bytes(fixed)
+          PY
+      - name: Run the complete external-engine suite
+        run: cargo --config 'profile.dev.package."*".opt-level=0' test --locked -p craft-anything-engines
       - name: Install fixed native Frida tools
         run: |
           python3 -m venv "$RUNNER_TEMP/frida-oracle"
           "$RUNNER_TEMP/frida-oracle/bin/python" -m pip install frida-tools==14.13.1 frida==17.26.2
-      - name: Install Rust
-        run: |
-          rustup toolchain install 1.99.0 --profile minimal
-          rustup default 1.99.0
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
-        with:
-          key: craft-frida-process-columns-native-v1
-          save-if: true
-          cache-on-failure: true
-      - name: Compare live process names through both public parsing paths
+      - name: Compare live processes and native application-table formatting
         run: |
           mkdir -p crates/engines/examples
           trap 'rm -f crates/engines/examples/validation_frida_columns.rs' EXIT
@@ -66,6 +102,29 @@ jobs:
           }
           RS
           cargo --config 'profile.dev.package."*".opt-level=0' build --locked -p craft-anything-engines --example validation_frida_columns
+          cat > /tmp/validation_frida_app_table.py <<'PY'
+          import json
+          import sys
+          from types import SimpleNamespace
+          from frida_tools import ps
+          from frida_tools.application import ConsoleApplication
+          
+          fixtures = json.loads(sys.argv[1])
+          
+          class DeviceFixture:
+              def enumerate_applications(self, **kwargs):
+                  return [SimpleNamespace(pid=pid, name=name, identifier=identifier, parameters={})
+                          for pid, name, identifier in fixtures]
+          
+          def run_fixture(self):
+              self._device = DeviceFixture()
+              self._start()
+              assert self._exit_status == 0, self._exit_status
+          
+          ConsoleApplication.run = run_fixture
+          sys.argv = ["frida-ps", "-D", "local", "-ai"]
+          ps.main()
+          PY
           cat > /tmp/validation_frida_columns.py <<'PY'
           import importlib.metadata
           import json
@@ -136,7 +195,49 @@ jobs:
                       child.terminate()
                   for child in children:
                       child.wait(timeout=5)
+          
+          APPLICATION_TABLES = [
+              ("ordinary", [(1234, "Example App", "com.example.app")]),
+              ("repeated_spaces", [(1234, "two  spaces", "com.example.one"), (1235, "plain", "com.example.two")]),
+              ("identifier_without_dot", [(1234, "Example App", "simple")]),
+              ("unicode", [(1234, "工具 Example", "org.example.one"), (1235, "🌍 café", "org.example.two")]),
+              ("narrow_columns", [(12, "A", "x")]),
+              ("one_digit_pid", [(1, "A", "org.example.one")]),
+              ("empty_identifier", [(12, "my app.exe", ""), (13, "plain", "org.example.two")]),
+              ("nonrunning_policy", [(0, "Not running", "org.example.idle"), (12, "plain", "org.example.running")]),
+          ]
+          application_results = []
+          for name, fixtures in APPLICATION_TABLES:
+              table = subprocess.check_output(
+                  [sys.executable, "/tmp/validation_frida_app_table.py", json.dumps(fixtures, ensure_ascii=False)],
+                  text=True, env={**os.environ, "NO_COLOR": "1", "TERM": "dumb"},
+              )
+              wanted = sorted([{"pid":pid, "name":label, **({"identifier":identifier} if identifier else {})}
+                               for pid, label, identifier in fixtures if pid], key=lambda item: item["pid"])
+              pids = ",".join(str(item["pid"]) for item in wanted)
+              actual = json.loads(subprocess.check_output(
+                  ["target/debug/examples/validation_frida_columns", "parse", "unused", pids],
+                  text=True, input=table,
+              ))
+              assert actual == wanted, (name, table, actual, wanted)
+              application_results.append({"name":name, "rows":len(wanted), "equal":True, "table":table})
+          for row in application_results:
+              print(json.dumps(row, ensure_ascii=False), flush=True)
+          print(json.dumps({"native_formatter_application_tables": len(application_results), "mismatches": 0}), flush=True)
           PY
-          "$RUNNER_TEMP/frida-oracle/bin/python" /tmp/validation_frida_columns.py
-      - name: Require an unchanged source tree
-        run: test -z "$(git status --porcelain)"
+          EXPECT_FIXED=1 "$RUNNER_TEMP/frida-oracle/bin/python" /tmp/validation_frida_columns.py
+          git diff --exit-code
+      - name: Run strict all-target Clippy
+        run: cargo --config 'profile.dev.package."*".opt-level=0' clippy --locked -p craft-anything-engines --all-targets -- -D warnings
+      - name: Check repository contracts
+        run: |
+          cargo --config 'profile.dev.package."*".opt-level=0' xtask layers
+          cargo --config 'profile.dev.package."*".opt-level=0' xtask locks
+          cargo --config 'profile.dev.package."*".opt-level=0' xtask secrets
+      - name: Check all WebAssembly layers
+        run: cargo --config 'profile.dev.package."*".opt-level=0' xtask wasm
+      - name: Require formatting and an unchanged source tree
+        run: |
+          cargo fmt --all -- --check
+          git diff --check
+          git diff --exit-code

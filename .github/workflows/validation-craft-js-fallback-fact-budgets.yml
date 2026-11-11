@@ -1,4 +1,4 @@
-name: Lexer fallback fact budget validation
+name: Lexer fallback final-document validation
 
 on:
   push:
@@ -23,108 +23,31 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: Afloat16/craft-anything
-          ref: caae6d3d14e1011d4e156dbfb9bdb7ea32d20188
+          ref: 057b657f28a7d20b7af85b4568a86e105b23af17
           fetch-depth: 0
           persist-credentials: false
       - name: Install Rust
         run: |
-          rustup toolchain install 1.99.0 --profile minimal --component rustfmt --component clippy --target wasm32-unknown-unknown
+          rustup toolchain install 1.99.0 --profile minimal --component rustfmt
           rustup default 1.99.0
-          rustc --version
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
         with:
           key: craft-js-fallback-fact-budgets-v1
           save-if: true
           cache-on-failure: true
-      - name: Check formatting
-        run: cargo fmt --all -- --check
-      - name: Reproduce original failures and compare retained public facts
+      - name: Verify unchanged implementation, tests and dependencies
         run: |
-          mkdir -p crates/js/examples
-          trap 'rm -f crates/js/examples/validation_fallback_budgets.rs' EXIT
-          cat > crates/js/examples/validation_fallback_budgets.rs <<'RUST'
-          use std::io::Read;
-          use craft_anything_js::{Limits, analyze};
-          
-          fn main() {
-              let mut source = String::new();
-              std::io::stdin().read_to_string(&mut source).unwrap();
-              let facts = analyze("fallback.js", &source, &Limits { max_parse_bytes: 0, ..Limits::default() }).facts;
-              println!("{}", serde_json::json!({
-                  "endpoints": facts.endpoints.len(),
-                  "exposed": facts.exposed.len(),
-                  "truncated": facts.truncated,
-                  "serialized_bytes": serde_json::to_vec(&facts).unwrap().len(),
-              }));
-          }
-          RUST
           python3 - <<'PY'
-          import json
-          import pathlib
           import subprocess
-          
-          source_path = pathlib.Path("crates/js/src/fallback.rs")
-          example = pathlib.Path("crates/js/examples/validation_fallback_budgets.rs")
-          fixed = source_path.read_bytes()
-          cargo = ["cargo", "--config", 'profile.dev.package."*".opt-level=0']
-          failures = {
-              "fetch_facts_keep_the_first_rows_within_the_list_budget",
-              "literal_urls_cannot_extend_an_already_full_call_budget",
-              "earlier_literal_urls_spend_the_same_endpoint_budget_as_calls",
-              "exposed_bridges_keep_the_first_keys_within_the_list_budget",
-              "a_full_endpoint_list_does_not_stop_other_facts",
-              "endpoint_and_bridge_budgets_are_independent",
-          }
-          
-          def observations():
-              subprocess.run(cargo + ["build", "--locked", "-p", "craft-anything-js", "--example", "validation_fallback_budgets"], check=True)
-              results = {}
-              for count in (5000, 50000):
-                  source = "fetch('/same');\n" * count + "contextBridge.exposeInMainWorld('bridge', {});\n" * count
-                  output = subprocess.check_output(["target/debug/examples/validation_fallback_budgets"], input=source, text=True)
-                  results[count] = json.loads(output)
-              return results
-          
-          try:
-              source_path.write_bytes(subprocess.check_output(["git", "show", "7116cc6cb486ada87497de2568c6b6db5a2ea783:" + source_path.as_posix()]))
-              result = subprocess.run(cargo + ["test", "--locked", "-p", "craft-anything-js", "--test", "fallback_fact_budgets", "--", "--nocapture"],
-                                      text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-              print(result.stdout, end="")
-              if result.returncode == 0 or "test result: FAILED. 2 passed; 6 failed;" not in result.stdout:
-                  raise SystemExit("Original source did not reproduce six failures and two passing controls")
-              failure_list = result.stdout.rsplit("failures:", 1)[-1].split("test result:", 1)[0]
-              actual_failures = {line.strip() for line in failure_list.splitlines() if line.strip()}
-              if actual_failures != failures:
-                  raise SystemExit("Unexpected original-source failure set: " + repr(actual_failures))
-              baseline = observations()
-              source_path.write_bytes(fixed)
-              current = observations()
-              for count in (5000, 50000):
-                  assert baseline[count]["endpoints"] == count
-                  assert baseline[count]["exposed"] == count
-                  assert baseline[count]["truncated"] == []
-                  assert current[count]["endpoints"] == 5000
-                  assert current[count]["exposed"] == 5000
-              assert current[5000] == baseline[5000], "Exact-limit control must remain byte-identical"
-              assert current[50000]["truncated"] == ["endpoints", "exposed"]
-              assert current[50000]["serialized_bytes"] < baseline[50000]["serialized_bytes"] / 5
-              print("Public analyzer retained-facts comparison: " + json.dumps({"baseline": baseline, "fixed": current}, sort_keys=True))
-          finally:
-              source_path.write_bytes(fixed)
-              example.unlink(missing_ok=True)
+          base = "caae6d3d14e1011d4e156dbfb9bdb7ea32d20188"
+          changed = set(subprocess.check_output(["git", "diff", "--name-only", base, "HEAD"], text=True).splitlines())
+          assert changed == {"docs/ROADMAP.md", "docs/STATUS.md"}, changed
+          subprocess.run(["git", "diff", "--exit-code", base, "HEAD", "--", ".", ":(exclude)docs/ROADMAP.md", ":(exclude)docs/STATUS.md"], check=True)
+          print("All implementation, test and dependency files are identical to the fully validated source.")
           PY
-      - name: Run the full JavaScript and analysis suites
-        run: cargo --config 'profile.dev.package."*".opt-level=0' test --locked -p craft-anything-js -p craft-anything-analysis
-      - name: Run strict all-target Clippy
-        run: cargo --config 'profile.dev.package."*".opt-level=0' clippy --locked -p craft-anything-js -p craft-anything-analysis --all-targets -- -D warnings
-      - name: Check repository contracts
-        run: |
-          cargo --config 'profile.dev.package."*".opt-level=0' xtask layers
-          cargo --config 'profile.dev.package."*".opt-level=0' xtask locks
-          cargo --config 'profile.dev.package."*".opt-level=0' xtask secrets
-      - name: Check all WebAssembly layers
-        run: cargo --config 'profile.dev.package."*".opt-level=0' xtask wasm
-      - name: Require formatting and an unchanged tree
+      - name: Validate final documents
         run: |
           cargo fmt --all -- --check
+          cargo --config 'profile.dev.package."*".opt-level=0' xtask secrets
+          git diff --check caae6d3d14e1011d4e156dbfb9bdb7ea32d20188 HEAD
           git diff --exit-code

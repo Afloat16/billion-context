@@ -1,13 +1,13 @@
-name: Craft SQLite schema current-main integration
+name: Craft SQLite final documentation identity
 on:
   push:
     branches: [validation/craft-sqlite-schema-completeness-20261111]
 permissions:
   contents: read
 jobs:
-  schema:
+  final-identity:
     runs-on: ubuntu-24.04
-    timeout-minutes: 70
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: candidate
@@ -15,46 +15,37 @@ jobs:
       CARGO_INCREMENTAL: "0"
       CARGO_BUILD_JOBS: "2"
       CARGO_PROFILE_DEV_DEBUG: "0"
-      CARGO_PROFILE_TEST_DEBUG: "0"
       CARGO_PROFILE_DEV_OPT_LEVEL: "0"
       CARGO_TERM_COLOR: never
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          path: validation
-          persist-credentials: false
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
           repository: Afloat16/craft-anything
-          ref: fca8b0c7f9f4fd54a172bf9fe834393f54844a23
+          ref: e44c7a07828514d2c22d82accf7183e28cf2c83d
           path: candidate
           fetch-depth: 2
           persist-credentials: false
-      - name: Install CI Rust, formatting, Clippy and WebAssembly support
-        run: |
-          rustup toolchain install 1.99.0 --profile minimal --component rustfmt --component clippy --target wasm32-unknown-unknown
-          rustup default 1.99.0
-          rustc --version
-      - name: Check formatting before compilation
-        run: cargo fmt --all -- --check
-      - name: Verify integration source identity against measured candidate
+      - name: Prove the final commit changes documentation only
         run: |
           git fetch --no-tags --depth=1 origin 3a9ad9c6c5de05701d423b8c7e9cc37b550a7170
-          git fetch --no-tags --depth=1 origin 6bafba62e745cd3e5fbebb2baf085fffee62ed7b
-          python3 "$GITHUB_WORKSPACE/validation/.github/validation/sqlite_schema_identity.py"
-      - name: Run all tests in every touched crate
-        run: cargo --config 'profile.dev.package."*".opt-level=0' test --locked -p craft-anything-formats -p craft-anything-engine -p craft-anything-testkit
-      - name: Run strict all-target Clippy in every touched crate
-        run: cargo --config 'profile.dev.package."*".opt-level=0' clippy --locked -p craft-anything-formats -p craft-anything-engine -p craft-anything-testkit --all-targets -- -D warnings
-      - name: Check layers, locks and secrets
+          python3 - <<'PY'
+          import subprocess
+          before = "fca8b0c7f9f4fd54a172bf9fe834393f54844a23"
+          expected = ["docs/ROADMAP.md", "docs/STATUS.md"]
+          files = subprocess.check_output(["git", "diff", "--name-only", before, "HEAD"], text=True).splitlines()
+          assert files == expected, files
+          subprocess.run(["git", "diff", "--exit-code", before, "HEAD", "--", "crates", "Cargo.toml", "Cargo.lock", "rustfmt.toml"], check=True)
+          print("Exact final head differs from the fully tested candidate only in ROADMAP and STATUS.")
+          PY
+          git diff --check 3a9ad9c6c5de05701d423b8c7e9cc37b550a7170 HEAD
+      - name: Install CI Rust for repository checks
+        run: |
+          rustup toolchain install 1.99.0 --profile minimal
+          rustup default 1.99.0
+      - name: Check final repository layers, locks and secrets
         run: |
           cargo --config 'profile.dev.package."*".opt-level=0' xtask layers
           cargo --config 'profile.dev.package."*".opt-level=0' xtask locks
           cargo --config 'profile.dev.package."*".opt-level=0' xtask secrets
-      - name: Check complete WebAssembly layer gate
-        run: cargo --config 'profile.dev.package."*".opt-level=0' xtask wasm
-      - name: Verify exact source and patch whitespace
-        run: |
-          git diff --check 3a9ad9c6c5de05701d423b8c7e9cc37b550a7170 HEAD
           git diff --exit-code
           test -z "$(git ls-files --others --exclude-standard)"

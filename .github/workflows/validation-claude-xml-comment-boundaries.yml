@@ -1,0 +1,55 @@
+name: Claude XML comment record boundary review
+on:
+  push:
+    branches: [validation/claude-xml-comment-boundaries-20261111]
+permissions:
+  contents: read
+jobs:
+  comparison:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: Afloat16/claude-mem
+          ref: 7a7f46c6f22a1f46ad82ed84712c5e88401d1b78
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - name: Install repository dependencies
+        run: npm install --no-audit --no-fund
+      - name: Reproduce cross-record loss on the latest reviewed PR head
+        shell: bash
+        run: |
+          git fetch --no-tags --depth=1 origin 3a64199d40a185b91853a0196ddaebb7e9cf3a71 ce458825812ce94264946ca1d92bc5d2f4f59f6b
+          git checkout --detach ce458825812ce94264946ca1d92bc5d2f4f59f6b
+          set +e
+          bun test tests/sdk/parser-literal-markup.test.ts 2>&1 | tee "$RUNNER_TEMP/xml-comment-baseline.log"
+          result=${PIPESTATUS[0]}
+          set -e
+          test "$result" -eq 1
+          grep -F ' 2 fail' "$RUNNER_TEMP/xml-comment-baseline.log"
+          grep -F ' 7 pass' "$RUNNER_TEMP/xml-comment-baseline.log"
+          grep -F '(fail) observer XML literal markup > keeps separate observations' "$RUNNER_TEMP/xml-comment-baseline.log"
+          grep -F '(pass) observer XML literal markup > preserves valid comment and CDATA boundaries' "$RUNNER_TEMP/xml-comment-baseline.log"
+      - name: Verify fixed record boundaries and actual SQLite persistence
+        run: |
+          git checkout --detach 7a7f46c6f22a1f46ad82ed84712c5e88401d1b78
+          bun test tests/sdk/parser-literal-markup.test.ts
+      - name: Run parser and response processing regressions
+        run: bun test tests/sdk/parser.test.ts tests/sdk/parser-character-references.test.ts tests/worker/agents/response-processor*.test.ts
+      - name: Run observation-turn media integration
+        run: bun test tests/media/inference-observation-turn.test.ts --timeout 30000
+      - name: Check root and viewer TypeScript
+        run: npm run typecheck
+      - name: Build all shipped bundles
+        run: node scripts/build-hooks.js
+      - name: Check patch and lane ownership
+        run: |
+          git diff --check 3a64199d40a185b91853a0196ddaebb7e9cf3a71 HEAD
+          bun scripts/test-lanes.ts check

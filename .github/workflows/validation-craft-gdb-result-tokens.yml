@@ -26,8 +26,10 @@ jobs:
           ref: 3ce1ce9f52077a53811be8a0309fdbe85b16b417
           fetch-depth: 0
           persist-credentials: false
-      - name: Check native GDB with Python support
+      - name: Install and check native GDB with Python support
         run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends gdb
           gdb --version
           gdb -nx -q -batch -ex 'python import time; print("GDB_PYTHON_READY")'
       - name: Install Rust

@@ -1,0 +1,82 @@
+name: Claude server prior-reply platform comparison
+on:
+  push:
+    branches: [validation/claude-server-prior-platform-20261111]
+permissions:
+  contents: read
+jobs:
+  comparison:
+    name: server context on ${{ matrix.label }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: baseline
+            ref: dc0e1817729a50e658b4e3e07ba31b9dc428bb50
+          - label: fixed
+            ref: c30e848c64f110b25565b14f5600470f9ad3970f
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: context_test
+        ports: [5432:5432]
+        options: >-
+          --health-cmd "pg_isready -U postgres -d context_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      CLAUDE_MEM_TEST_POSTGRES_URL: postgres://postgres:postgres@127.0.0.1:5432/context_test
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: Afloat16/claude-mem
+          ref: ${{ matrix.ref }}
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - name: Install repository dependencies
+        run: npm install --no-audit --no-fund
+      - name: Reproduce the lost source on unchanged main
+        if: matrix.label == 'baseline'
+        shell: bash
+        run: |
+          set +e
+          bun test tests/context/server-prior-transcript-platform.test.ts --timeout 60000 2>&1 | tee /tmp/server-prior-baseline.log
+          result=${PIPESTATUS[0]}
+          set -e
+          test "$result" -eq 1
+          grep -F '4 fail' /tmp/server-prior-baseline.log
+          grep -F '2 pass' /tmp/server-prior-baseline.log
+      - name: Verify PostgreSQL HTTP to native prior-reply rendering
+        if: matrix.label == 'fixed'
+        run: bun test tests/context/server-prior-transcript-platform.test.ts --timeout 60000
+      - name: Verify context selection and existing server routes
+        if: matrix.label == 'fixed'
+        run: >-
+          bun test
+          tests/context/prior-transcript-platform.test.ts
+          tests/context/server-context-mode-filters.test.ts
+          tests/server/session-start-context-from-store.test.ts
+          tests/server/context-recency-mode.test.ts
+          tests/server/runtime/server-viewer-data-routes.test.ts
+          --timeout 60000
+      - name: Check root and viewer TypeScript
+        if: matrix.label == 'fixed'
+        run: npm run typecheck
+      - name: Build all shipped bundles
+        if: matrix.label == 'fixed'
+        run: node scripts/build-hooks.js
+      - name: Check patch whitespace
+        if: matrix.label == 'fixed'
+        run: git diff --check 308a9ab4a141ac49ca0e72bbccc0c9cdf3770ca0 HEAD

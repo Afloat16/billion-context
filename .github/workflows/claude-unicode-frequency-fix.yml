@@ -1,0 +1,86 @@
+name: Claude Unicode frequency validation
+on:
+  push:
+    branches: [validation/claude-unicode-frequency-fix-20261111]
+permissions:
+  contents: read
+jobs:
+  verify:
+    name: Unicode search on ${{ matrix.label }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: unchanged-main
+            sha: 22d148ea6f34b86ea9a6e0911c7a7a0c71431b31
+            baseline: true
+          - label: native-word-fix
+            sha: b7ce631a931667faf6be54f9833830684a40ef3b
+            baseline: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: Afloat16/claude-mem
+          ref: ${{ matrix.sha }}
+          path: subject
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: Afloat16/claude-mem
+          ref: b7ce631a931667faf6be54f9833830684a40ef3b
+          path: regressions
+          sparse-checkout: tests/services/sqlite/search-fts-unicode-frequency.test.ts
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - name: Install repository dependencies
+        working-directory: subject
+        run: npm install --no-audit --no-fund
+      - name: Run identical native SQLite regressions
+        shell: bash
+        working-directory: subject
+        env:
+          BASELINE: ${{ matrix.baseline }}
+        run: |
+          cp ../regressions/tests/services/sqlite/search-fts-unicode-frequency.test.ts tests/services/sqlite/search-fts-unicode-frequency.test.ts
+          set +e
+          bun test tests/services/sqlite/search-fts-unicode-frequency.test.ts --timeout 30000 2>&1 | tee unicode-regressions.log
+          status=${PIPESTATUS[0]}
+          set -e
+          if [ "$BASELINE" = "true" ]; then
+            test "$status" -eq 1
+            grep -q '12 fail' unicode-regressions.log
+            grep -q '7 pass' unicode-regressions.log
+          else
+            test "$status" -eq 0
+          fi
+      - name: Run related SQLite and search behavioral suites
+        if: ${{ !matrix.baseline }}
+        working-directory: subject
+        run: bun test tests/services/sqlite/ tests/worker/search/ --timeout 30000
+      - name: Check root and viewer TypeScript
+        if: ${{ !matrix.baseline }}
+        working-directory: subject
+        run: npm run typecheck
+      - name: Build all shipped bundles
+        if: ${{ !matrix.baseline }}
+        working-directory: subject
+        run: node scripts/build-hooks.js
+      - name: Check patch whitespace
+        if: ${{ !matrix.baseline }}
+        working-directory: subject
+        run: git diff --check HEAD^ HEAD
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: unicode-frequency-${{ matrix.label }}
+          path: subject/unicode-regressions.log
+          retention-days: 7

@@ -1,13 +1,13 @@
-name: Probe bzip2 concatenation against native libbz2
+name: Validate complete bzip2 recovery against the native CLI
 on:
   push:
     branches: ["validation/craft-bzip2-concatenation-20261111"]
 permissions:
   contents: read
 jobs:
-  baseline:
+  prepare:
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -15,12 +15,12 @@ jobs:
           persist-credentials: false
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          repository: storytold/craft-anything
-          ref: 86d047cbc5368ca595c83e045893fb39c7f3f7f8
+          repository: Afloat16/craft-anything
+          ref: a22846cfda2551392c03c3bfbbdc046fd64d3ba2
           path: base
           persist-credentials: false
       - name: Install fixed Rust
-        run: rustup toolchain install 1.99.0 --profile minimal
+        run: rustup toolchain install 1.99.0 --profile minimal --component rustfmt --component clippy --target wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
         with:
           workspaces: base -> target
@@ -30,7 +30,54 @@ jobs:
           mkdir -p base/crates/formats/examples
           cp validation/.github/validation/bzip2_probe.rs base/crates/formats/examples/bzip2_probe.rs
           cd base
-          cargo +1.99.0 build --locked -p craft-anything-formats --example bzip2_probe
+          rustup override set 1.99.0
+          cargo build --locked -p craft-anything-formats --example bzip2_probe
           git diff --exit-code
-      - name: Compare independently compressed streams and full outputs
+      - name: Native CLI comparison with unchanged source
         run: python3 validation/.github/validation/bzip2_native.py
+      - name: Meaningful negative controls before product changes
+        run: |
+          python3 - <<'PY'
+          import re, subprocess
+          from pathlib import Path
+          target=Path("base/crates/formats/tests/bzip2_members.rs")
+          target.write_text(Path("validation/.github/validation/bzip2_members.rs").read_text())
+          r=subprocess.run(["cargo","+1.99.0","test","--locked","-p","craft-anything-formats","--test","bzip2_members","--","--nocapture"], cwd="base", text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=1200)
+          print(r.stdout)
+          assert r.returncode == 101
+          assert re.search(r"test result: FAILED\. 4 passed; 6 failed; 0 ignored", r.stdout)
+          subprocess.run(["git","diff","--exit-code"],cwd="base",check=True)
+          PY
+      - name: Prepare proposed source and Cargo-resolved dependency change
+        run: python3 validation/.github/validation/bzip2_lockgen.py
+      - name: Rebuild fixed public decoder and compare complete native outputs
+        run: |
+          cd base
+          cargo build --locked -p craft-anything-formats --example bzip2_probe
+          cd ..
+          python3 validation/.github/validation/bzip2_compare.py
+          rm base/crates/formats/examples/bzip2_probe.rs
+      - name: Complete formats and engine suites and strict Clippy
+        working-directory: base
+        run: |
+          cargo fmt --all --check
+          cargo test --locked -p craft-anything-formats -p craft-anything-engine --no-fail-fast
+          cargo clippy --locked -p craft-anything-formats -p craft-anything-engine --all-targets -- -D warnings
+      - name: Contracts and all L0-L2 WebAssembly builds
+        working-directory: base
+        run: |
+          cargo xtask layers
+          cargo xtask locks
+          cargo xtask secrets
+          cargo xtask wasm
+          git diff --check
+      - name: Assert exact prepared file scope
+        run: |
+          python3 - <<'PY'
+          import subprocess
+          expected={"Cargo.lock","crates/formats/Cargo.toml","crates/formats/src/decompress.rs","crates/formats/tests/bzip2_members.rs"}
+          output=subprocess.check_output(["git","status","--porcelain","--untracked-files=all"],cwd="base",text=True)
+          changed={line[3:] for line in output.splitlines()}
+          assert changed == expected, output
+          print("Prepared working files exactly:",sorted(changed))
+          PY

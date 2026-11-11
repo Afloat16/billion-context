@@ -8,14 +8,13 @@ payloads = {
     "multiblock": bytes(range(251)) * 900,
 }
 streams = {name: bz2.compress(data, compresslevel=1 if name in ("ascii", "multiblock") else 9) for name, data in payloads.items()}
+native_bin = shutil.which("bzip2")
+assert native_bin, "The independent native bzip2 CLI is required"
 cases = []
 def case(name, raw, cap=None, expected=None):
     if expected is None:
-        try:
-            plain = bz2.decompress(raw)
-            expected = {"kind": "ok", "bytes": list(plain)}
-        except (OSError, EOFError, ValueError):
-            expected = {"kind": "corrupt"}
+        native = subprocess.run([native_bin, "-dc"], input=raw, capture_output=True, timeout=10)
+        expected = {"kind": "ok", "bytes": list(native.stdout)} if native.returncode == 0 else {"kind": "corrupt"}
     if cap is None:
         cap = 2_000_000
     if expected["kind"] == "ok" and len(expected["bytes"]) > cap:
@@ -61,6 +60,10 @@ for name, raw in [
     ("single-trailing-zeroes", a+bytes(16)),
 ]:
     case(name, raw)
+bad_empty = bytearray(e); bad_empty[-1] ^= 1
+case("bad-later-empty-crc", a+bad_empty)
+for name, tail in [("one-byte-header",b"B"), ("two-byte-header",b"BZ"), ("invalid-level-zero",b"BZh0"), ("invalid-level-letter",b"BZhA")]:
+    case(name, a+tail)
 case("empty-input", b"", expected={"kind": "corrupt"})
 case("invalid-input", b"not a bzip2 stream", expected={"kind": "corrupt"})
 print("BZ2_ENVIRONMENT="+json.dumps({"python": platform.python_version(), "native_cli": shutil.which("bzip2")}))

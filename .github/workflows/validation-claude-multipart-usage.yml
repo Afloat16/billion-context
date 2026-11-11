@@ -1,0 +1,24 @@
+name: Claude SDK multipart usage protocol
+on:
+  push:
+    branches: [validation/claude-multipart-usage-20261111]
+permissions:
+  contents: read
+jobs:
+  native-protocol:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install the declared SDK version in an isolated probe directory
+        run: |
+          mkdir -p "$RUNNER_TEMP/claude-sdk-probe"
+          cp .github/validation/claude-multipart-usage-probe.mjs "$RUNNER_TEMP/claude-sdk-probe/probe.mjs"
+          npm install --prefix "$RUNNER_TEMP/claude-sdk-probe" --ignore-scripts --no-audit --no-fund --package-lock=false @anthropic-ai/claude-agent-sdk@0.3.172
+      - name: Observe actual SDK and bundled CLI frames from owned localhost SSE
+        run: node "$RUNNER_TEMP/claude-sdk-probe/probe.mjs"

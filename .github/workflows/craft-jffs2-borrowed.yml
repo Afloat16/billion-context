@@ -1,14 +1,13 @@
-name: Verify borrowed JFFS2 node payloads
+name: Verify final borrowed JFFS2 recovery
 on:
   push:
     branches: ["validation/craft-jffs2-borrowed-payloads-20261111"]
 permissions:
   contents: read
 jobs:
-  correctness:
-    if: ${{ false }}
+  final:
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 35
     defaults:
       run:
         working-directory: fixed
@@ -16,10 +15,32 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: Afloat16/craft-anything
-          ref: ee91a2b82639b673b140442615f9cab0bb71a73d
+          ref: fd7a56682a8ab4659defde285b4f0a765e263857
           fetch-depth: 3
           path: fixed
           persist-credentials: false
+      - name: Verify tested formats and dependency identity after the main rebase
+        run: |
+          git fetch --no-tags --depth=1 origin ee91a2b82639b673b140442615f9cab0bb71a73d
+          git diff --exit-code ee91a2b82639b673b140442615f9cab0bb71a73d HEAD -- crates/formats Cargo.toml Cargo.lock
+          python3 - <<'PY'
+          import json, subprocess
+          changed = set(subprocess.check_output(["git", "diff", "--name-only", "ee91a2b82639b673b140442615f9cab0bb71a73d", "HEAD", "--", ".", ":!docs"], text=True).splitlines())
+          expected = {
+              "crates/ai/src/cli_agents/adapters.rs",
+              "crates/ai/src/cli_agents/grants.rs",
+              "crates/ai/src/cli_agents/mod.rs",
+              "crates/analysis/src/js_source.rs",
+              "crates/analysis/tests/source_map_inventory_bounds.rs",
+              "crates/engine/src/tools/application_tools.rs",
+          }
+          assert changed == expected, sorted(changed)
+          for path in changed:
+              current = subprocess.check_output(["git", "rev-parse", "HEAD:" + path], text=True)
+              upstream = subprocess.check_output(["git", "rev-parse", "adeddc9149b97c21e595e743c9875d84e805eece:" + path], text=True)
+              assert current == upstream, path
+          print("IDENTITY=" + json.dumps({"formats_and_dependencies_identical": True, "unchanged_upstream_additions": sorted(changed)}))
+          PY
       - name: Install fixed Rust
         run: rustup toolchain install 1.99.0 --profile minimal --component rustfmt --component clippy --target wasm32-unknown-unknown
       - name: Use fixed compiler
@@ -28,89 +49,19 @@ jobs:
         with:
           workspaces: fixed -> target
           shared-key: craft-jffs2-1.99
-      - name: Check formatting
+      - name: Formatting and final JFFS2 compatibility controls
         run: |
-          if ! cargo fmt --all --check; then
-            cargo fmt --all
-            python3 - <<'PY'
-          import json
-          from pathlib import Path
-          print("FORMATTED_FILES_JSON=" + json.dumps({"crates/formats/src/fsread/jffs2.rs": Path("crates/formats/src/fsread/jffs2.rs").read_text()}))
-          PY
-            exit 1
-          fi
-      - name: Complete formats suite
-        run: cargo test --locked -p craft-anything-formats --no-fail-fast
+          cargo fmt --all --check
+          cargo test --locked -p craft-anything-formats --test jffs2_decoded_lengths --test jffs2_big_endian --test jffs2_unrecovered_size
       - name: Strict Clippy
         run: cargo clippy --locked -p craft-anything-formats --all-targets -- -D warnings
-      - name: Repository contracts
+      - name: Repository contracts and all L0-L2 WebAssembly targets
         run: |
           cargo xtask layers
           cargo xtask locks
           cargo xtask secrets
-      - name: All L0-L2 WebAssembly targets
-        run: cargo xtask wasm
-      - name: Clean source and dependencies
+          cargo xtask wasm
+      - name: Clean final diff and dependencies
         run: |
-          git diff --check
+          git diff --check adeddc9149b97c21e595e743c9875d84e805eece HEAD
           test -z "$(git status --porcelain)"
-  native:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 45
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          path: validation
-          persist-credentials: false
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          repository: Afloat16/craft-anything
-          ref: 35f11365026263f43884eadc9ec3296b99893ba1
-          path: base
-          persist-credentials: false
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          repository: Afloat16/craft-anything
-          ref: ee91a2b82639b673b140442615f9cab0bb71a73d
-          path: fixed
-          persist-credentials: false
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          repository: sigma-star/mtd-utils
-          ref: 31e990c56aba7584cde310685d663bb122f16003
-          path: mtd-source
-          persist-credentials: false
-      - name: Build the fixed native image producer
-        working-directory: mtd-source
-        run: |
-          sh autogen.sh
-          ./configure --without-tests --without-lsmtd --without-ubifs --without-lzo --without-zstd --without-xattr --without-selinux --without-crypto --disable-ubihealthd --with-zlib
-          make -j2 mkfs.jffs2
-          ./mkfs.jffs2 -V
-      - name: Install fixed Rust
-        run: rustup toolchain install 1.99.0 --profile minimal
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
-        with:
-          workspaces: |
-            base -> target
-            fixed -> target
-          shared-key: craft-jffs2-native-1.99
-      - name: Existing version, damage, byte-order and budget regressions on both versions
-        run: |
-          for directory in base fixed; do
-            (cd "$directory" && cargo +1.99.0 test --locked -p craft-anything-formats --test jffs2_decoded_lengths --test jffs2_big_endian --test jffs2_unrecovered_size)
-          done
-      - name: Compile the identical public recovery probe
-        run: |
-          cmp base/Cargo.toml fixed/Cargo.toml
-          cmp base/Cargo.lock fixed/Cargo.lock
-          cmp base/crates/formats/Cargo.toml fixed/crates/formats/Cargo.toml
-          for directory in base fixed; do
-            mkdir -p "$directory/crates/formats/examples"
-            cp validation/.github/validation/jffs2_payload_probe.rs "$directory/crates/formats/examples/jffs2_payload_probe.rs"
-            (cd "$directory" && cargo +1.99.0 build --locked --release -p craft-anything-formats --example jffs2_payload_probe)
-          done
-      - name: Compare native images, exact recovered bytes, time and process peak RSS
-        env:
-          JFFS2_NATIVE_PRODUCER: ${{ github.workspace }}/mtd-source/mkfs.jffs2
-        run: python3 validation/.github/validation/jffs2_payload_compare.py

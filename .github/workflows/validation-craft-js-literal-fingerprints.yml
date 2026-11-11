@@ -1,0 +1,197 @@
+name: JavaScript literal fingerprint validation
+
+on:
+  push:
+    branches: [validation/craft-js-literal-fingerprints-20261111]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  literal-fingerprints:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      CARGO_INCREMENTAL: "0"
+      CARGO_BUILD_JOBS: "2"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+      CARGO_PROFILE_DEV_OPT_LEVEL: "0"
+      CARGO_TERM_COLOR: never
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: Afloat16/craft-anything
+          ref: 7116cc6cb486ada87497de2568c6b6db5a2ea783
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install Rust
+        run: |
+          rustup toolchain install 1.99.0 --profile minimal --component rustfmt --component clippy --target wasm32-unknown-unknown
+          rustup default 1.99.0
+          rustc --version
+          node --version
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
+        with:
+          key: craft-js-literal-fingerprints-probe-v1
+          save-if: true
+          cache-on-failure: true
+      - name: Compare original fingerprints against real JavaScript results
+        run: |
+          mkdir -p crates/analysis/examples
+          trap 'rm -f crates/analysis/examples/validation_literal_fingerprints.rs' EXIT
+          cat > crates/analysis/examples/validation_literal_fingerprints.rs <<'RUST'
+          use std::io::Read;
+          use craft_anything_analysis::js_app::{AppFile, AppGraph, AppInput, AppOptions, analyze_application};
+          use craft_anything_analysis::js_compare::compare_versions;
+          use craft_anything_js::{Limits, analyze};
+          
+          fn graph(path: &str, source: &str) -> AppGraph {
+              let file = AppFile { path: path.into(), bytes: source.as_bytes().to_vec() };
+              let listing = vec![(file.path.clone(), file.bytes.len() as u64)];
+              analyze_application(&AppInput { files: vec![file], listing, ..Default::default() }, &AppOptions::default(), &|| false).unwrap()
+          }
+          
+          fn bundle(source: &str) -> String {
+              format!("(self.webpackChunkdemo=self.webpackChunkdemo||[]).push([[1],{{7:function(module,exports,require){{{source}}}}}]);")
+          }
+          
+          fn main() {
+              let mut input = String::new();
+              std::io::stdin().read_to_string(&mut input).unwrap();
+              let cases: Vec<(String, String)> = serde_json::from_str(&input).unwrap();
+              let result: Vec<_> = cases.into_iter().map(|(left, right)| {
+                  let l = analyze("left.js", &left, &Limits::default());
+                  let r = analyze("right.js", &right, &Limits::default());
+                  serde_json::json!({
+                      "left": l.facts.fingerprint,
+                      "right": r.facts.fingerprint,
+                      "files": compare_versions(&graph("left.js", &left), &graph("right.js", &right))["modules"],
+                      "bundle": compare_versions(&graph("bundle.js", &bundle(&left)), &graph("bundle.js", &bundle(&right)))["bundle_modules"],
+                  })
+              }).collect();
+              println!("{}", serde_json::to_string(&result).unwrap());
+          }
+          RUST
+          cargo --config 'profile.dev.package."*".opt-level=0' build --locked -p craft-anything-analysis --example validation_literal_fingerprints
+          node <<'NODE'
+          const assert = require("node:assert/strict");
+          const vm = require("node:vm");
+          const { execFileSync } = require("node:child_process");
+          const cases = [
+            {
+              "name": "bigint_value",
+              "left": "globalThis.result = 1n;",
+              "right": "globalThis.result = 2n;",
+              "same": false
+            },
+            {
+              "name": "bigint_beyond_float_precision",
+              "left": "globalThis.result = 9007199254740992n;",
+              "right": "globalThis.result = 9007199254740993n;",
+              "same": false
+            },
+            {
+              "name": "regexp_pattern",
+              "left": "globalThis.result = /cat/.test('cat');",
+              "right": "globalThis.result = /dog/.test('cat');",
+              "same": false
+            },
+            {
+              "name": "regexp_flags",
+              "left": "globalThis.result = /a/.test('A');",
+              "right": "globalThis.result = /a/i.test('A');",
+              "same": false
+            },
+            {
+              "name": "template_text",
+              "left": "globalThis.result = `left`;",
+              "right": "globalThis.result = `right`;",
+              "same": false
+            },
+            {
+              "name": "template_prefix",
+              "left": "const value = 3; globalThis.result = `left${value}`;",
+              "right": "const value = 3; globalThis.result = `right${value}`;",
+              "same": false
+            },
+            {
+              "name": "template_tail",
+              "left": "const value = 3; globalThis.result = `prefix${value}left`;",
+              "right": "const value = 3; globalThis.result = `prefix${value}right`;",
+              "same": false
+            },
+            {
+              "name": "tagged_raw_text",
+              "left": "globalThis.result = String.raw`\\n`;",
+              "right": "globalThis.result = String.raw`\n`;",
+              "same": false
+            },
+            {
+              "name": "tagged_invalid_escapes",
+              "left": "globalThis.result = String.raw`\\u{}`;",
+              "right": "globalThis.result = String.raw`\\xG0`;",
+              "same": false
+            },
+            {
+              "name": "renamed_identifiers",
+              "left": "function original(parameter) { return parameter + 1; } globalThis.result = original(2);",
+              "right": "function a(b) { return b + 1; } globalThis.result = a(2);",
+              "same": true
+            },
+            {
+              "name": "bigint_equivalent_spelling",
+              "left": "globalThis.result = 10n;",
+              "right": "globalThis.result = 0xan;",
+              "same": true
+            },
+            {
+              "name": "regexp_flag_order",
+              "left": "globalThis.result = /a/gi.test('A');",
+              "right": "globalThis.result = /a/ig.test('A');",
+              "same": true
+            },
+            {
+              "name": "number_equivalent_spelling",
+              "left": "globalThis.result = 10;",
+              "right": "globalThis.result = 1e1;",
+              "same": true
+            },
+            {
+              "name": "string_equivalent_spelling",
+              "left": "globalThis.result = 'x';",
+              "right": "globalThis.result = '\\u0078';",
+              "same": true
+            }
+          ];
+          const parsed = JSON.parse(execFileSync("target/debug/examples/validation_literal_fingerprints", {
+            input: JSON.stringify(cases.map(test => [test.left, test.right])),
+            encoding: "utf8",
+          }));
+          function execute(source) {
+            const context = {};
+            vm.runInNewContext(source, context, { timeout: 1000 });
+            const value = context.result;
+            return { type: typeof value, value: typeof value === "bigint" ? value.toString() : value };
+          }
+          const outcomes = cases.map((test, index) => {
+            const left = execute(test.left);
+            const right = execute(test.right);
+            assert.equal(JSON.stringify(left) === JSON.stringify(right), test.same, test.name + " runtime expectation");
+            const result = parsed[index];
+            assert.match(result.left, /^[a-f0-9]{64}$/);
+            assert.match(result.right, /^[a-f0-9]{64}$/);
+            assert.equal(result.left, result.right, test.name + " baseline fingerprint");
+            assert.equal(result.files.renamed.length, 1, test.name + " baseline file structure match");
+            assert.equal(result.bundle.left, 1);
+            assert.equal(result.bundle.right, 1);
+            assert.equal(result.bundle.matched_by.structure, 1, test.name + " baseline bundle structure match");
+            assert.equal(result.bundle.changed.length, 0);
+            return { name: test.name, same_runtime_result: test.same, same_fingerprint: result.left === result.right,
+              bundle_changed: result.bundle.changed.length };
+          });
+          console.log("Original literal fingerprints / Node " + process.version + ": " + JSON.stringify(outcomes));
+          NODE
+      - name: Require an unchanged source tree
+        run: git diff --exit-code

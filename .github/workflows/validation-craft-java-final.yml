@@ -1,0 +1,53 @@
+name: Craft Java final source identity
+on:
+  push:
+    branches: [validation/craft-java-attribute-final-20261111]
+permissions:
+  contents: read
+jobs:
+  identity:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: candidate
+    env:
+      CARGO_INCREMENTAL: "0"
+      CARGO_BUILD_JOBS: "2"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+      CARGO_PROFILE_DEV_OPT_LEVEL: "0"
+      CARGO_TERM_COLOR: never
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          path: validation
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: Afloat16/craft-anything
+          ref: 4fcec5dd79c07e2d3fd76557e05cad4da85f9bc9
+          path: candidate
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Verify public claim and exact tested source
+        run: |
+          git fetch --no-tags --depth=1 origin 3ce1ce9f52077a53811be8a0309fdbe85b16b417
+          git fetch --no-tags --depth=1 origin 7d6576d35d9220de9e0fbd28be939ed1f05b1ef3
+          git fetch --no-tags --depth=1 origin 825c87b994a93491ec1a0ac8590828d8775ca14a
+          python3 "$GITHUB_WORKSPACE/validation/.github/validation/java_attributes_final.py"
+      - name: Install fixed formatting toolchain
+        run: |
+          rustup toolchain install 1.99.0 --profile minimal --component rustfmt
+          rustup default 1.99.0
+      - name: Check formatting and repository contracts
+        run: |
+          cargo fmt --all -- --check
+          cargo --config 'profile.dev.package."*".opt-level=0' xtask layers
+          cargo --config 'profile.dev.package."*".opt-level=0' xtask locks
+          cargo --config 'profile.dev.package."*".opt-level=0' xtask secrets
+      - name: Check whitespace and clean checkout
+        run: |
+          git diff --check 3ce1ce9f52077a53811be8a0309fdbe85b16b417 HEAD
+          git diff --exit-code
+          test -z "$(git ls-files --others --exclude-standard)"

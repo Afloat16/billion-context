@@ -1,0 +1,93 @@
+name: Claude GitHub SSH product validation
+on:
+  push:
+    branches: [validation/claude-github-ssh-fix-20261111]
+permissions:
+  contents: read
+jobs:
+  verify:
+    name: GitHub SSH products on ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: unchanged-main
+            os: ubuntu-latest
+            sha: 22d148ea6f34b86ea9a6e0911c7a7a0c71431b31
+            baseline: true
+          - label: fixed-linux
+            os: ubuntu-latest
+            sha: abc70f9c5fded19eb76b7b822d4dc676075691d0
+            baseline: false
+          - label: fixed-windows
+            os: windows-2022
+            sha: abc70f9c5fded19eb76b7b822d4dc676075691d0
+            baseline: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: Afloat16/claude-mem
+          ref: ${{ matrix.sha }}
+          path: subject
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: Afloat16/claude-mem
+          ref: abc70f9c5fded19eb76b7b822d4dc676075691d0
+          path: regressions
+          sparse-checkout: tests/worker/work-view/work-product-github-ssh.test.mjs
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - name: Verify real Git push output and product links
+        shell: bash
+        working-directory: subject
+        env:
+          BASELINE: ${{ matrix.baseline }}
+        run: |
+          cp ../regressions/tests/worker/work-view/work-product-github-ssh.test.mjs tests/worker/work-view/work-product-github-ssh.test.mjs
+          set +e
+          bun test tests/worker/work-view/work-product-github-ssh.test.mjs --timeout 30000 2>&1 | tee github-ssh-regressions.log
+          status=${PIPESTATUS[0]}
+          set -e
+          if [ "$BASELINE" = "true" ]; then
+            test "$status" -eq 1
+            grep -q '5 fail' github-ssh-regressions.log
+            grep -q '1 pass' github-ssh-regressions.log
+          else
+            test "$status" -eq 0
+          fi
+      - name: Install repository dependencies
+        if: matrix.label == 'fixed-linux'
+        working-directory: subject
+        run: npm install --no-audit --no-fund
+      - name: Run all work product behavioral suites
+        if: matrix.label == 'fixed-linux'
+        working-directory: subject
+        run: bun test tests/worker/work-view/work-product*.mjs --timeout 30000
+      - name: Check root and viewer TypeScript
+        if: matrix.label == 'fixed-linux'
+        working-directory: subject
+        run: npm run typecheck
+      - name: Build all shipped bundles
+        if: matrix.label == 'fixed-linux'
+        working-directory: subject
+        run: node scripts/build-hooks.js
+      - name: Check patch whitespace
+        if: matrix.label == 'fixed-linux'
+        working-directory: subject
+        run: git diff --check HEAD^ HEAD
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: github-ssh-${{ matrix.label }}
+          path: subject/github-ssh-regressions.log
+          retention-days: 7

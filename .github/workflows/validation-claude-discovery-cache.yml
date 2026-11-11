@@ -1,0 +1,65 @@
+name: Claude completed usage cache comparison
+on:
+  push:
+    branches: [validation/claude-discovery-usage-cache-20261111]
+permissions:
+  contents: read
+jobs:
+  fixed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: Afloat16/claude-mem
+          ref: 28ca4cafa441316af43754dfb1b93c1ac1199423
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - name: Install repository dependencies
+        run: npm install --no-audit --no-fund
+      - name: Verify cached agent and terminal labels from actual SQLite
+        run: bun test tests/context/discovery-usage-cache.test.ts --timeout 30000
+      - name: Run context cache and token write suites
+        run: bun test tests/context/context-cache*.test.ts tests/sqlite/session-store-transactions.test.ts tests/sqlite/import-row-identities.test.ts tests/worker/claude-provider-discovery-backfill.test.ts tests/worker/sync/cloud-sync.test.ts --timeout 30000
+      - name: Check root and viewer TypeScript
+        run: npm run typecheck
+      - name: Build all shipped bundles
+        run: node scripts/build-hooks.js
+      - name: Check patch and test lane ownership
+        run: |
+          git diff --check 308a9ab4a141ac49ca0e72bbccc0c9cdf3770ca0 HEAD
+          bun scripts/test-lanes.ts check
+  baseline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: Afloat16/claude-mem
+          ref: d544965d72f04de5d10de94d52119bd39a16d8cc
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - name: Install repository dependencies
+        run: npm install --no-audit --no-fund
+      - name: Reproduce unchanged cached token labels on unchanged main
+        shell: bash
+        run: |
+          set +e
+          bun test tests/context/discovery-usage-cache.test.ts --timeout 30000 2>&1 | tee /tmp/discovery-cache-baseline.log
+          result=${PIPESTATUS[0]}
+          set -e
+          test "$result" -eq 1
+          grep -F '3 fail' /tmp/discovery-cache-baseline.log
+          grep -F '2 pass' /tmp/discovery-cache-baseline.log

@@ -1,4 +1,4 @@
-name: GraphQL block-string validation
+name: GraphQL block-string final-document validation
 
 on:
   push:
@@ -23,171 +23,31 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: Afloat16/craft-anything
-          ref: cfbaa14a07b895541746d26d20eae3dbe47450aa
+          ref: 625490640c47196eb5c51343b9f08cd3c9623788
           fetch-depth: 0
           persist-credentials: false
       - name: Install Rust
         run: |
-          rustup toolchain install 1.99.0 --profile minimal --component rustfmt --component clippy --target wasm32-unknown-unknown
+          rustup toolchain install 1.99.0 --profile minimal --component rustfmt
           rustup default 1.99.0
-          rustc --version
-          node --version
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
         with:
           key: craft-graphql-block-strings-full-v1
           save-if: true
           cache-on-failure: true
-      - name: Check formatting
-        run: cargo fmt --all -- --check
-      - name: Reproduce the unchanged string-boundary failures and controls
+      - name: Verify unchanged implementation, tests and dependencies
         run: |
           python3 - <<'PY'
-          import pathlib
           import subprocess
-          path = pathlib.Path("crates/js/src/api_ops.rs")
-          fixed = path.read_bytes()
-          try:
-              path.write_bytes(subprocess.check_output(["git", "show", "3a9ad9c6c5de05701d423b8c7e9cc37b550a7170:" + path.as_posix()]))
-              result = subprocess.run(
-                  ["cargo", "--config", 'profile.dev.package."*".opt-level=0', "test", "--locked",
-                   "-p", "craft-anything-js", "--test", "graphql_block_strings", "--", "--nocapture"],
-                  text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-              )
-              print(result.stdout, end="")
-              expected = {
-                  "block_strings_in_variable_defaults_keep_operations",
-                  "block_strings_in_selection_sets_keep_operations",
-                  "block_strings_in_directives_keep_operations",
-                  "preceding_backslashes_do_not_disable_a_triple_quote_escape",
-                  "escaped_quote_runs_and_unicode_stay_inside_the_block",
-                  "block_strings_in_fragments_do_not_hide_later_operations",
-                  "an_escaped_triple_quote_cannot_close_an_unterminated_block",
-                  "parsed_and_fallback_api_facts_follow_block_string_boundaries",
-              }
-              if result.returncode == 0 or "test result: FAILED. 2 passed; 8 failed;" not in result.stdout:
-                  raise SystemExit("The original source did not reproduce eight failures and two passing controls")
-              failures = result.stdout.rsplit("failures:", 1)[-1].split("test result:", 1)[0]
-              actual = {line.strip() for line in failures.splitlines() if line.strip()}
-              if actual != expected:
-                  raise SystemExit("Unexpected baseline failure set: " + repr(actual))
-          finally:
-              path.write_bytes(fixed)
+          base = "cfbaa14a07b895541746d26d20eae3dbe47450aa"
+          changed = set(subprocess.check_output(["git", "diff", "--name-only", base, "HEAD"], text=True).splitlines())
+          assert changed == {"docs/ROADMAP.md", "docs/STATUS.md"}, changed
+          subprocess.run(["git", "diff", "--exit-code", base, "HEAD", "--", ".", ":(exclude)docs/ROADMAP.md", ":(exclude)docs/STATUS.md"], check=True)
+          print("All implementation, test and dependency files are identical to the fully validated source.")
           PY
-      - name: Run the full JavaScript and analysis suites
-        run: cargo --config 'profile.dev.package."*".opt-level=0' test --locked -p craft-anything-js -p craft-anything-analysis
-      - name: Compare fixed public readers with GraphQL.js
-        env:
-          EXPECT_FIXED: "1"
-        run: |
-          npm install --prefix "$RUNNER_TEMP/craft-graphql-block-reference" --ignore-scripts --no-audit --no-fund graphql@16.11.0
-          mkdir -p crates/js/examples
-          trap 'rm -f crates/js/examples/validation_graphql_blocks.rs' EXIT
-          cat > crates/js/examples/validation_graphql_blocks.rs <<'RUST'
-          use std::io::Read;
-          use craft_anything_js::{Limits, analyze, api_ops::read_document};
-          
-          fn main() {
-              let mut document = String::new();
-              std::io::stdin().read_to_string(&mut document).unwrap();
-              let direct = read_document(&document, false).map(|doc| {
-                  doc.operations.into_iter().map(|op| serde_json::json!({"kind": op.kind, "name": op.name, "literal": op.literal})).collect::<Vec<_>>()
-              });
-              let source = format!("const document = {};", serde_json::to_string(&document).unwrap());
-              let parsed = analyze("client.js", &source, &Limits::default());
-              let fallback = analyze("client.js", &source, &Limits { max_parse_bytes: 0, ..Limits::default() });
-              println!("{}", serde_json::json!({"direct": direct, "parsed": parsed.facts.api_operations, "fallback": fallback.facts.api_operations}));
-          }
-          RUST
-          cargo --config 'profile.dev.package."*".opt-level=0' build --locked -p craft-anything-js --example validation_graphql_blocks
-          node <<'NODE'
-          const assert = require("node:assert/strict");
-          const path = require("node:path");
-          const { isDeepStrictEqual } = require("node:util");
-          const { execFileSync } = require("node:child_process");
-          const { parse, version } = require(path.join(process.env.RUNNER_TEMP, "craft-graphql-block-reference/node_modules/graphql"));
-          const binary = path.resolve("target/debug/examples/validation_graphql_blocks");
-          const block = value => '"""' + value + '"""';
-          const escaped = '\\' + '"""';
-          const fixtures = [];
-          const add = (label, document, valid = true) => fixtures.push({ label, document, valid });
-          for (const kind of ["query", "mutation", "subscription"]) {
-            const name = kind[0].toUpperCase() + kind.slice(1);
-            const value = block("before " + escaped + " after");
-            add(kind + "-default", kind + " " + name + "($value: String = " + value + ") { field(arg: $value) }");
-            add(kind + "-selection", kind + " " + name + " { field(arg: " + value + ") }");
-            add(kind + "-directive", kind + " " + name + " @note(text: " + value + ") { field }");
-          }
-          for (const slashes of [2, 3, 4]) {
-            add("backslashes-" + slashes, "query Slashes { field(arg: " + block("before " + "\\".repeat(slashes) + '""" after') + ") }");
-          }
-          add("unicode-multiline", "query Unicode { field(arg: " + block("é雪\n" + escaped + "\n# not a comment } ) {\n🙂") + ") }");
-          add("consecutive-escapes", "query Consecutive { field(arg: " + block(escaped + escaped + " tail") + ") }");
-          add("escaped-then-one-quote", "query OneQuote { field(arg: " + block(escaped + '" tail') + ") }");
-          add("escaped-then-two-quotes", "query TwoQuotes { field(arg: " + block(escaped + '"" tail') + ") }");
-          add("quotes-before-escape", "query BeforeQuote { field(arg: " + block('before ""' + escaped + " tail") + ") }");
-          add("escaped-at-end", "query AtEnd { field(arg: " + block("before " + escaped) + ") }");
-          add("fragment-and-later-operation", "fragment Part on User { field(arg: " + block(escaped + " tail") + ") } query Fragments { user { ...Part } }");
-          add("anonymous-operation", "query { field(arg: " + block("before " + escaped + " after") + ") }");
-          add("plain-block-control", "query Plain { field(arg: " + block("hello\nworld") + ") }");
-          add("empty-block-control", "query Empty { field(arg: " + block("") + ") }");
-          add("literal-backslash-control", "query Backslash { field(arg: " + block(String.raw`\n \t \u0041`) + ") }");
-          add("one-two-quotes-control", "query Quotes { field(arg: " + block('one " then two "" done') + ") }");
-          add("ordinary-string-control", "query Ordinary { field(arg: " + JSON.stringify('quote " and backslash \\') + ") }");
-          for (const slashes of [1, 2, 4]) {
-            add("unterminated-selection-" + slashes, 'query Invalid { field(arg: """before ' + "\\".repeat(slashes) + '""" ) }', false);
-          }
-          add("unterminated-default", 'query Invalid($value: String = """before ' + escaped + ' ) { field(arg: $value) }', false);
-          add("unterminated-directive", 'query Invalid @note(text: """before ' + escaped + ' ) { field }', false);
-          add("unterminated-plain-control", 'query Invalid { field(arg: """before ) }', false);
-          add("unterminated-ordinary-control", 'query Invalid { field(arg: "before ) }', false);
-          const normalize = rows => rows.filter(row => row.protocol === "graphql")
-            .map(row => ({ kind: row.kind, name: row.name ?? null, literal: row.literal }));
-          const rows = [];
-          for (const fixture of fixtures) {
-            let expected;
-            if (fixture.valid) {
-              expected = parse(fixture.document).definitions.filter(def => def.kind === "OperationDefinition")
-                .map(def => ({ kind: def.operation, name: def.name?.value ?? null, literal: true }));
-            } else {
-              assert.throws(() => parse(fixture.document), fixture.label + " must be invalid");
-              expected = null;
-            }
-            const actual = JSON.parse(execFileSync(binary, { input: fixture.document, encoding: "utf8" }));
-            const paths = { direct: actual.direct, parsed: normalize(actual.parsed), fallback: normalize(actual.fallback) };
-            const mismatches = Object.entries(paths).filter(([name, got]) =>
-              !isDeepStrictEqual(got, name === "direct" ? expected : (expected ?? []))).map(([name]) => name);
-            const row = { label: fixture.label, valid: fixture.valid, expected, actual: paths, mismatches };
-            rows.push(row);
-            console.log("GRAPHQL_BLOCK_ROW " + JSON.stringify(row));
-          }
-          const evidence = {
-            graphqlVersion: version, node: process.version, fixtures: rows.length,
-            valid: rows.filter(row => row.valid).length,
-            invalid: rows.filter(row => !row.valid).length,
-            mismatchedDocuments: rows.filter(row => row.mismatches.length).length,
-            mismatchedPaths: rows.reduce((sum, row) => sum + row.mismatches.length, 0),
-            passingDocuments: rows.filter(row => !row.mismatches.length).length,
-          };
-          console.log("GRAPHQL_BLOCK_EVIDENCE " + JSON.stringify(evidence));
-          if (process.env.EXPECT_FIXED === "1") {
-            assert.equal(evidence.mismatchedPaths, 0);
-          } else {
-            assert.ok(evidence.mismatchedDocuments > 0, "the unchanged source must reproduce the bug");
-            assert.ok(rows.filter(row => row.label.endsWith("-control")).every(row => row.mismatches.length === 0));
-            assert.ok(rows.some(row => row.label.startsWith("unterminated-selection") && row.mismatches.length));
-          }
-          NODE
-      - name: Run strict all-target Clippy
-        run: cargo --config 'profile.dev.package."*".opt-level=0' clippy --locked -p craft-anything-js -p craft-anything-analysis --all-targets -- -D warnings
-      - name: Check repository contracts
-        run: |
-          cargo --config 'profile.dev.package."*".opt-level=0' xtask layers
-          cargo --config 'profile.dev.package."*".opt-level=0' xtask locks
-          cargo --config 'profile.dev.package."*".opt-level=0' xtask secrets
-      - name: Check all WebAssembly layers
-        run: cargo --config 'profile.dev.package."*".opt-level=0' xtask wasm
-      - name: Require formatting and an unchanged tree
+      - name: Validate final documents
         run: |
           cargo fmt --all -- --check
-          git diff --check
+          cargo --config 'profile.dev.package."*".opt-level=0' xtask secrets
+          git diff --check cfbaa14a07b895541746d26d20eae3dbe47450aa HEAD
           git diff --exit-code

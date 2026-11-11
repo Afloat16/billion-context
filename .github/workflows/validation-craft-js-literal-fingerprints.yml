@@ -23,7 +23,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: Afloat16/craft-anything
-          ref: 8c1ec340ff213e3be9ed1b96718f69c79703dd33
+          ref: 7d3dd731920f2d6158ee96c407ec6924f4b12337
           fetch-depth: 0
           persist-credentials: false
       - name: Install Rust
@@ -34,7 +34,7 @@ jobs:
           node --version
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
         with:
-          key: craft-js-literal-fingerprints-framing-v1
+          key: craft-js-literal-fingerprints-framing-v2
           save-if: true
           cache-on-failure: true
       - name: Check formatting

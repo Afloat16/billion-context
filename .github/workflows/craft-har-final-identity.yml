@@ -15,21 +15,21 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: Afloat16/craft-anything
-          ref: a8c7c888cc36ba36951f395f0f29d0f56d43cdfe
-          fetch-depth: 2
+          ref: 477675b11378d50ec496a37c9717785b58add6fe
+          fetch-depth: 3
           path: source
           persist-credentials: false
       - name: Preserve the fully tested implementation
         run: |
-          test "$(git rev-parse HEAD^)" = 0d26125bbdfbef2496cb4cfbdcfcf77a04c30dd9
-          git diff --exit-code HEAD^ HEAD -- . ':!docs/ROADMAP.md' ':!docs/STATUS.md'
+          test "$(git rev-parse HEAD~2)" = 0d26125bbdfbef2496cb4cfbdcfcf77a04c30dd9
+          git diff --exit-code 0d26125bbdfbef2496cb4cfbdcfcf77a04c30dd9 HEAD -- . ':!docs/ROADMAP.md' ':!docs/STATUS.md' ':!docs/pitfalls.md'
           python3 - <<'PY'
           import subprocess
-          changed = subprocess.check_output(["git", "diff", "--name-only", "HEAD^", "HEAD"], text=True).splitlines()
-          assert changed == ["docs/ROADMAP.md", "docs/STATUS.md"], changed
+          changed = subprocess.check_output(["git", "diff", "--name-only", "0d26125bbdfbef2496cb4cfbdcfcf77a04c30dd9", "HEAD"], text=True).splitlines()
+          assert changed == ["docs/ROADMAP.md", "docs/STATUS.md", "docs/pitfalls.md"], changed
           print("All production sources, tests, manifests and lockfiles match the fully tested head.")
           PY
-          git diff --check HEAD^ HEAD
+          git diff --check 0d26125bbdfbef2496cb4cfbdcfcf77a04c30dd9 HEAD
       - name: Install fixed Rust
         run: rustup toolchain install 1.99.0 --profile minimal --component rustfmt
       - name: Use fixed compiler

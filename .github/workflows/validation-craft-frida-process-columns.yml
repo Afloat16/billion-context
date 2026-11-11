@@ -23,7 +23,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: Afloat16/craft-anything
-          ref: 3657077dd0bd001711d0126778d1880640b4d59f
+          ref: 748535426bd6265d1fa2ccae2476de734e52f642
           fetch-depth: 0
           persist-credentials: false
       - name: Install Rust
@@ -32,7 +32,7 @@ jobs:
           rustup default 1.99.0
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
         with:
-          key: craft-frida-process-columns-full-v1
+          key: craft-frida-process-columns-full-v2
           save-if: true
           cache-on-failure: true
       - name: Check formatting

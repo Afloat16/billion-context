@@ -1,0 +1,44 @@
+name: Compare ELF signal evidence with real GDB core notes
+on:
+  push:
+    branches: ["validation/craft-elf-signal-origins-20261111"]
+permissions:
+  contents: read
+jobs:
+  baseline:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          path: validation
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: Afloat16/craft-anything
+          ref: 36531c4ba20b7a4d081ef0d7a08c235dcb9778f4
+          path: base
+          persist-credentials: false
+      - name: Install the previously verified native debugger package
+        run: |
+          sudo apt-get install -y --no-install-recommends gdb=15.1-1ubuntu1~24.04.1
+          test "$(dpkg-query -W -f='${Version}' gdb)" = '15.1-1ubuntu1~24.04.1'
+          gdb --version
+          gdb -nx -q -batch -ex 'python import time; print("GDB_PYTHON_READY")'
+      - name: Generate nine real process cores and read native signal fields
+        run: python3 validation/.github/validation/elf_signal_native.py
+      - name: Install fixed Rust
+        run: rustup toolchain install 1.99.0 --profile minimal
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
+        with:
+          workspaces: base -> target
+          shared-key: craft-elf-siginfo-1.99
+      - name: Build the unchanged public parser and evidence API
+        run: |
+          mkdir -p base/crates/engine/examples
+          cp validation/.github/validation/core_signal_probe.rs base/crates/engine/examples/core_signal_probe.rs
+          cd base
+          rustup override set 1.99.0
+          cargo build --locked -p craft-anything-engine --example core_signal_probe
+      - name: Compare both production APIs with native metadata
+        run: python3 validation/.github/validation/elf_signal_compare.py

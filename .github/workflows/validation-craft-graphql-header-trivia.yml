@@ -23,7 +23,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: Afloat16/craft-anything
-          ref: 9a10d39539bcdf2c07ee8be1388a803b34d10034
+          ref: 5c24bee6b782700283f7f7233eeb286b092c47d1
           fetch-depth: 0
           persist-credentials: false
       - name: Install Rust
@@ -37,6 +37,10 @@ jobs:
           key: craft-graphql-header-trivia-v1
           save-if: true
           cache-on-failure: true
+      - name: Require the reviewed implementation and tests
+        run: |
+          git fetch --no-tags origin 9a10d39539bcdf2c07ee8be1388a803b34d10034
+          git diff --exit-code 9a10d39539bcdf2c07ee8be1388a803b34d10034 HEAD -- crates/js/src/api_ops.rs crates/js/tests/graphql_header_trivia.rs
       - name: Check formatting
         run: cargo fmt --all -- --check
       - name: Reproduce the unchanged header failures and controls
@@ -47,7 +51,7 @@ jobs:
           path = pathlib.Path("crates/js/src/api_ops.rs")
           fixed = path.read_bytes()
           try:
-              path.write_bytes(subprocess.check_output(["git", "show", "80479a9b9e07babe1a7a96252784cba9c9c31451:" + path.as_posix()]))
+              path.write_bytes(subprocess.check_output(["git", "show", "87408500d0960745aff25ed81463cffc2028189a:" + path.as_posix()]))
               result = subprocess.run(
                   ["cargo", "--config", 'profile.dev.package."*".opt-level=0', "test", "--locked",
                    "-p", "craft-anything-js", "--test", "graphql_header_trivia", "--", "--nocapture"],

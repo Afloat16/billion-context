@@ -1,0 +1,190 @@
+name: Recovered module file and directory prefix validation
+
+on:
+  push:
+    branches: [validation/craft-js-recovery-prefixes-20261111]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  recovery-prefixes:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      CARGO_INCREMENTAL: "0"
+      CARGO_BUILD_JOBS: "2"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+      CARGO_PROFILE_DEV_OPT_LEVEL: "0"
+      CARGO_TERM_COLOR: never
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: Afloat16/craft-anything
+          ref: 22c44d01d271c49187104802459085f273f855f0
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install Rust
+        run: |
+          rustup toolchain install 1.99.0 --profile minimal --component rustfmt --component clippy --target wasm32-unknown-unknown
+          rustup default 1.99.0
+          rustc --version
+          node --version
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
+        with:
+          key: craft-js-recovery-prefixes-probe-v1
+          save-if: true
+          cache-on-failure: true
+      - name: Reproduce native writes for originally valid source paths
+        run: |
+          mkdir -p crates/js/examples
+          trap 'rm -f crates/js/examples/validation_recovery_prefixes.rs' EXIT
+          cat > crates/js/examples/validation_recovery_prefixes.rs <<'RUST'
+          use std::io::Read;
+          use craft_anything_js::{Limits, analyze};
+          use craft_anything_js::recover::{RewriteLevel, recover_modules};
+          
+          fn main() {
+              let mut input = String::new();
+              std::io::stdin().read_to_string(&mut input).unwrap();
+              let cases: Vec<Vec<String>> = serde_json::from_str(&input).unwrap();
+              let output: Vec<_> = cases.into_iter().map(|ids| {
+                  let source: String = ids.iter().map(|id| {
+                      let key = serde_json::to_string(id).unwrap();
+                      format!("(self.webpackChunkdemo=self.webpackChunkdemo||[]).push([[1],{{{key}:function(module){{module.exports = 0;}}}}]);\n")
+                  }).collect();
+                  let analysis = analyze("bundle.js", &source, &Limits::default());
+                  let recovered = recover_modules(&source, &analysis.bundle.modules, RewriteLevel::None, &Limits::default());
+                  serde_json::json!({"analysis_count": analysis.bundle.modules.len(), "modules": recovered})
+              }).collect();
+              println!("{}", serde_json::to_string(&output).unwrap());
+          }
+          RUST
+          cargo --config 'profile.dev.package."*".opt-level=0' build --locked -p craft-anything-js --example validation_recovery_prefixes
+          node <<'NODE'
+          const assert = require("node:assert/strict");
+          const fs = require("node:fs");
+          const path = require("node:path");
+          const { execFileSync } = require("node:child_process");
+          const cases = [
+            {
+              "name": "file_before_its_output_directory",
+              "ids": [
+                "entry",
+                "entry.js/child.js"
+              ],
+              "fails": true
+            },
+            {
+              "name": "directory_before_its_output_file",
+              "ids": [
+                "entry.js/child.js",
+                "entry"
+              ],
+              "fails": true
+            },
+            {
+              "name": "nested_extension_collision",
+              "ids": [
+                "src/entry",
+                "src/entry.js/child.js"
+              ],
+              "fails": true
+            },
+            {
+              "name": "sanitized_name_becomes_a_directory",
+              "ids": [
+                "thing?.js",
+                "thing_.js/child.js"
+              ],
+              "fails": true
+            },
+            {
+              "name": "several_prefix_levels",
+              "ids": [
+                "entry",
+                "entry.js/child",
+                "entry.js/child.js/leaf.js"
+              ],
+              "fails": true
+            },
+            {
+              "name": "ordinary_modules",
+              "ids": [
+                "entry",
+                "child.js"
+              ],
+              "fails": false
+            },
+            {
+              "name": "shared_parent_directories",
+              "ids": [
+                "src/a.js",
+                "src/b.js",
+                "src/nested/c.js"
+              ],
+              "fails": false
+            },
+            {
+              "name": "similar_noncomponent_prefix",
+              "ids": [
+                "entry",
+                "entry.jsx/child.js"
+              ],
+              "fails": false
+            },
+            {
+              "name": "repeated_registration_paths",
+              "ids": [
+                "module",
+                "module",
+                "module"
+              ],
+              "fails": false
+            }
+          ];
+          const results = JSON.parse(execFileSync("target/debug/examples/validation_recovery_prefixes", {
+            input: JSON.stringify(cases.map(test => test.ids)), encoding: "utf8",
+          }));
+          const root = fs.mkdtempSync(path.join(process.env.RUNNER_TEMP, "craft-recovery-prefix-"));
+          const outcomes = [];
+          try {
+            cases.forEach((test, index) => {
+              const original = path.join(root, "original-" + index);
+              for (const id of new Set(test.ids)) {
+                const filename = path.join(original, id);
+                fs.mkdirSync(path.dirname(filename), { recursive: true });
+                fs.writeFileSync(filename, "module.exports = 0;\n", { flag: "wx" });
+                assert.equal(fs.readFileSync(filename, "utf8"), "module.exports = 0;\n");
+              }
+              const result = results[index];
+              assert.equal(result.analysis_count, test.ids.length, test.name);
+              assert.equal(result.modules.length, test.ids.length, test.name);
+              assert.deepEqual(result.modules.map(module => module.id), test.ids, test.name);
+              assert.equal(new Set(result.modules.map(module => module.file_name)).size, test.ids.length, test.name);
+              const writes = result.modules.map(module => {
+                const filename = path.join(root, "restored-" + index, module.file_name);
+                let error = null;
+                try {
+                  fs.mkdirSync(path.dirname(filename), { recursive: true });
+                  fs.writeFileSync(filename, module.text, { flag: "wx" });
+                  assert.equal(fs.readFileSync(filename, "utf8"), module.text);
+                } catch (failure) {
+                  error = failure.code || String(failure);
+                  assert.ok(["ENOTDIR", "EISDIR", "EEXIST"].includes(error), String(failure));
+                }
+                return { id: module.id, file: module.file_name, error };
+              });
+              const failed = writes.filter(write => write.error !== null).length;
+              assert.equal(failed > 0, test.fails, test.name);
+              outcomes.push({ name: test.name, original_files_writable: true, restored: writes });
+            });
+            console.log("Original recovered module paths / " + process.platform + " / Node " + process.version + ": " + JSON.stringify(outcomes));
+          } finally {
+            fs.rmSync(root, { recursive: true, force: true });
+          }
+          NODE
+      - name: Require an unchanged source tree
+        run: git diff --exit-code

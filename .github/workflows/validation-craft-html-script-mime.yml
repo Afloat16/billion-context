@@ -23,7 +23,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: Afloat16/craft-anything
-          ref: 7116cc6cb486ada87497de2568c6b6db5a2ea783
+          ref: 2ad1606916aad22fdb60caa0fd59a3bf0f1d9975
           fetch-depth: 0
           persist-credentials: false
       - name: Install Rust
@@ -34,10 +34,52 @@ jobs:
           node --version
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
         with:
-          key: craft-html-script-mime-v1
+          key: craft-html-script-mime-full-v1
           save-if: true
           cache-on-failure: true
-      - name: Compare original script inventory with Chromium execution
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Reproduce original script inventory failures and controls
+        run: |
+          python3 - <<'PY'
+          import pathlib
+          import subprocess
+          path = pathlib.Path("crates/js/src/html.rs")
+          fixed = path.read_bytes()
+          cases = [
+              ("craft-anything-js", 3, {
+                  "unsupported_version_suffixes_are_not_inline_scripts",
+                  "unsupported_version_suffixes_are_not_external_scripts",
+                  "parameters_and_case_do_not_make_unsupported_versions_executable",
+                  "a_following_real_script_keeps_its_source_coordinates",
+              }),
+              ("craft-anything-analysis", 1, {
+                  "unsupported_script_versions_do_not_invent_inline_endpoints",
+                  "unsupported_script_versions_do_not_create_renderer_imports",
+              }),
+          ]
+          try:
+              path.write_bytes(subprocess.check_output(["git", "show", "7116cc6cb486ada87497de2568c6b6db5a2ea783:" + path.as_posix()]))
+              for package, passing, failures in cases:
+                  result = subprocess.run(
+                      ["cargo", "--config", 'profile.dev.package."*".opt-level=0', "test", "--locked",
+                       "-p", package, "--test", "html_script_mime_versions", "--", "--nocapture"],
+                      text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                  )
+                  print(result.stdout, end="")
+                  summary = f"test result: FAILED. {passing} passed; {len(failures)} failed;"
+                  if result.returncode == 0 or summary not in result.stdout:
+                      raise SystemExit("Original source did not reproduce expected failures and controls for " + package)
+                  failure_list = result.stdout.rsplit("failures:", 1)[-1].split("test result:", 1)[0]
+                  actual_failures = {line.strip() for line in failure_list.splitlines() if line.strip()}
+                  if actual_failures != failures:
+                      raise SystemExit("Unexpected original-source failure set: " + repr(actual_failures))
+          finally:
+              path.write_bytes(fixed)
+          PY
+      - name: Run the full JavaScript and analysis suites
+        run: cargo --config 'profile.dev.package."*".opt-level=0' test --locked -p craft-anything-js -p craft-anything-analysis
+      - name: Compare fixed script inventory with Chromium execution
         env:
           PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/craft-mime-chromium
         run: |
@@ -88,15 +130,26 @@ jobs:
               await page.setContent(html, { waitUntil: "load" });
               const actual = await page.evaluate(() => globalThis.executed);
               assert.deepEqual(actual, valid.map((_, index) => index));
-              assert.deepEqual(scannerIds, cases.map((_, index) => index));
+              assert.deepEqual(scannerIds, actual);
               const mismatches = scannerIds.filter(index => !actual.includes(index));
-              assert.equal(mismatches.length, 10);
-              console.log("Baseline MIME classification / Chromium " + browser.version() + " / Node " + process.version + ": " +
+              assert.equal(mismatches.length, 0);
+              console.log("Fixed MIME classification / Chromium " + browser.version() + " / Node " + process.version + ": " +
                 JSON.stringify({ browser_executed: actual.length, scanner_scripts: scannerIds.length, false_script_types: mismatches.map(index => cases[index]) }));
             } finally {
               await browser.close();
             }
           })().catch(error => { console.error(error); process.exitCode = 1; });
           NODE
-      - name: Require an unchanged source tree
-        run: git diff --exit-code
+      - name: Run strict all-target Clippy
+        run: cargo --config 'profile.dev.package."*".opt-level=0' clippy --locked -p craft-anything-js -p craft-anything-analysis --all-targets -- -D warnings
+      - name: Check repository contracts
+        run: |
+          cargo --config 'profile.dev.package."*".opt-level=0' xtask layers
+          cargo --config 'profile.dev.package."*".opt-level=0' xtask locks
+          cargo --config 'profile.dev.package."*".opt-level=0' xtask secrets
+      - name: Check all WebAssembly layers
+        run: cargo --config 'profile.dev.package."*".opt-level=0' xtask wasm
+      - name: Require formatting and an unchanged source tree
+        run: |
+          cargo fmt --all -- --check
+          git diff --exit-code

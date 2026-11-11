@@ -1,6 +1,8 @@
 from pathlib import Path
-import json, os, subprocess
+import json, os, subprocess, sys
 
+phase=sys.argv[1]
+assert phase in ("baseline", "fixed")
 root=Path(os.environ["RUNNER_TEMP"])/"elf-signal-native"
 cases=json.loads((root/"cases.json").read_text())
 program=Path("base/target/debug/examples/core_signal_probe").resolve()
@@ -26,5 +28,6 @@ for case in cases:
     if case["expected_fault"] is None and row["fault_location"] is not None: issues.append("fault_location")
     if issues: mismatches.append({"name":case["name"],"fields":issues,"signal":row["signal"]})
 report={"cases":len(cases),"mismatches":mismatches,"controls":len(cases)-len(mismatches)}
-print("NATIVE_CORE_BASELINE="+json.dumps(report),flush=True)
-assert {item["name"] for item in mismatches} == {"kill-segv","raise-ill","queue-bus","timer-segv","kill-abrt"}, report
+print("NATIVE_CORE_"+phase.upper()+"="+json.dumps(report),flush=True)
+expected_mismatches={"kill-segv","raise-ill","queue-bus","timer-segv","kill-abrt"} if phase == "baseline" else set()
+assert {item["name"] for item in mismatches} == expected_mismatches, report

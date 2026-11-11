@@ -1,13 +1,15 @@
-name: Compare ELF signal evidence with real GDB core notes
+name: Validate Linux ELF signal origins with native process cores
 on:
   push:
     branches: ["validation/craft-elf-signal-origins-20261111"]
 permissions:
   contents: read
 jobs:
-  baseline:
+  validate:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 40
+    env:
+      CARGO_TERM_COLOR: never
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -16,29 +18,60 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: Afloat16/craft-anything
-          ref: 36531c4ba20b7a4d081ef0d7a08c235dcb9778f4
+          ref: de266966a9eeb1de8f22cf4f2cd5b5bcff9b13e7
+          fetch-depth: 2
           path: base
           persist-credentials: false
-      - name: Install the previously verified native debugger package
+      - name: Install pinned Rust tools
+        run: rustup toolchain install 1.99.0 --profile minimal --component rustfmt --component clippy --target wasm32-unknown-unknown
+      - name: Install the verified GDB package
         run: |
           sudo apt-get install -y --no-install-recommends gdb=15.1-1ubuntu1~24.04.1
           test "$(dpkg-query -W -f='${Version}' gdb)" = '15.1-1ubuntu1~24.04.1'
           gdb --version
           gdb -nx -q -batch -ex 'python import time; print("GDB_PYTHON_READY")'
-      - name: Generate nine real process cores and read native signal fields
-        run: python3 validation/.github/validation/elf_signal_native.py
-      - name: Install fixed Rust
-        run: rustup toolchain install 1.99.0 --profile minimal
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
         with:
           workspaces: base -> target
           shared-key: craft-elf-siginfo-1.99
-      - name: Build the unchanged public parser and evidence API
+      - name: Format the three proposed source and test files
+        working-directory: base
         run: |
-          mkdir -p base/crates/engine/examples
-          cp validation/.github/validation/core_signal_probe.rs base/crates/engine/examples/core_signal_probe.rs
-          cd base
           rustup override set 1.99.0
-          cargo build --locked -p craft-anything-engine --example core_signal_probe
-      - name: Compare both production APIs with native metadata
-        run: python3 validation/.github/validation/elf_signal_compare.py
+          cargo fmt --all
+      - name: Produce nine owned process cores and read native signal metadata
+        run: python3 validation/.github/validation/elf_signal_native.py
+      - name: Compare original and corrected APIs against the same native cores and regressions
+        run: python3 validation/.github/validation/elf_signal_full_compare.py
+      - name: Complete formats and engine suites and strict all-target Clippy
+        working-directory: base
+        run: |
+          cargo fmt --all --check
+          cargo test --locked -p craft-anything-formats -p craft-anything-engine --no-fail-fast
+          cargo clippy --locked -p craft-anything-formats -p craft-anything-engine --all-targets -- -D warnings
+      - name: Validate contracts and all L0-L2 WebAssembly targets
+        working-directory: base
+        run: |
+          cargo xtask layers
+          cargo xtask locks
+          cargo xtask secrets
+          cargo xtask wasm
+          git diff --check
+      - name: Export only fully validated formatted files and assert scope
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib, json, subprocess
+          root=Path("base")
+          paths=["crates/formats/src/elf.rs","crates/formats/tests/elf_signal_origins.rs","crates/engine/tests/elf_signal_evidence.rs"]
+          output=subprocess.check_output(["git","status","--porcelain","--untracked-files=all"],cwd=root,text=True)
+          changed={line[3:] for line in output.splitlines()}
+          assert changed.issubset(set(paths)), output
+          hashes={}
+          for path in paths:
+              content=(root/path).read_text()
+              sha=hashlib.sha256(content.encode()).hexdigest()
+              hashes[path]=sha
+              print("ELF_FORMATTED_FILE="+json.dumps({"path":path,"content":content,"sha256":sha}))
+          print("ELF_VALIDATED_IDENTITY="+json.dumps({"candidate":"de266966a9eeb1de8f22cf4f2cd5b5bcff9b13e7","files":hashes,"lock_sha256":hashlib.sha256((root/"Cargo.lock").read_bytes()).hexdigest(),"format_changed":sorted(changed)}))
+          PY

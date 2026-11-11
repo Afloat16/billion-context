@@ -1,0 +1,218 @@
+name: CommonJS literal filename validation
+
+on:
+  push:
+    branches: [validation/craft-js-literal-filenames-20261111]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  application-paths:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      CARGO_INCREMENTAL: "0"
+      CARGO_BUILD_JOBS: "2"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+      CARGO_PROFILE_DEV_OPT_LEVEL: "0"
+      CARGO_TERM_COLOR: never
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: Afloat16/craft-anything
+          ref: 3d34220ad446d035abe00566bddcff128a8775f1
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install Rust and inspect Node
+        run: |
+          rustup toolchain install 1.99.0 --profile minimal --component rustfmt --component clippy --target wasm32-unknown-unknown
+          rustup default 1.99.0
+          rustc --version
+          node --version
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
+        with:
+          key: craft-js-literal-filenames-v1
+          save-if: true
+          cache-on-failure: true
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Reproduce the original application-graph failures and controls
+        run: |
+          python3 - <<'PY'
+          import pathlib
+          import subprocess
+          path = pathlib.Path("crates/analysis/src/js_app.rs")
+          fixed = path.read_bytes()
+          try:
+              path.write_bytes(subprocess.check_output(["git", "show", "2cee4610f07164920ca9f02cd75cd84fa99cba3b:" + path.as_posix()]))
+              command = ["cargo", "--config", 'profile.dev.package."*".opt-level=0', "test", "--locked",
+                         "-p", "craft-anything-analysis", "--test", "commonjs_literal_filenames", "--", "--nocapture"]
+              result = subprocess.run(command, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+              print(result.stdout, end="")
+              failures = [
+                  "commonjs_imports_keep_literal_query_and_fragment_characters",
+                  "extensionless_commonjs_imports_append_to_the_literal_file_name",
+                  "commonjs_imports_keep_literal_directory_names",
+                  "a_missing_literal_commonjs_file_does_not_resolve_to_a_stripped_name",
+                  "package_main_is_a_literal_file_path",
+              ]
+              if result.returncode == 0 or "test result: FAILED. 5 passed; 5 failed;" not in result.stdout:
+                  raise SystemExit("Original source did not reproduce five expected failures and five passing controls")
+              for name in failures:
+                  if "test " + name + " ... FAILED" not in result.stdout:
+                      raise SystemExit("Missing original-source regression: " + name)
+          finally:
+              path.write_bytes(fixed)
+          
+          PY
+      - name: Run the complete JavaScript and analysis suites
+        run: cargo --config 'profile.dev.package."*".opt-level=0' test --locked -p craft-anything-js -p craft-anything-analysis
+      - name: Compare application paths with real Node module loading
+        run: |
+          mkdir -p crates/analysis/examples
+          trap 'rm -f crates/analysis/examples/validation_cjs_graph.rs' EXIT
+          cat > crates/analysis/examples/validation_cjs_graph.rs <<'RUST'
+          use std::io::Read;
+          use craft_anything_analysis::js_app::{AppFile, AppInput, AppOptions, analyze_application};
+          
+          fn main() {
+              let mut source = String::new();
+              std::io::stdin().read_to_string(&mut source).unwrap();
+              let pairs: Vec<(String, String)> = serde_json::from_str(&source).unwrap();
+              let files: Vec<_> = pairs.into_iter().map(|(path, code)| AppFile { path, bytes: code.into_bytes() }).collect();
+              let listing = files.iter().map(|file| (file.path.clone(), file.bytes.len() as u64)).collect();
+              let input = AppInput { files, listing, ..AppInput::default() };
+              let graph = analyze_application(&input, &AppOptions::default(), &|| false).unwrap();
+              println!("{}", serde_json::to_string(&graph).unwrap());
+          }
+          
+          RUST
+          cargo --config 'profile.dev.package."*".opt-level=0' build --locked -p craft-anything-analysis --example validation_cjs_graph
+          node <<'NODE'
+          const assert = require("node:assert/strict");
+          const fs = require("node:fs");
+          const os = require("node:os");
+          const path = require("node:path");
+          const { createRequire } = require("node:module");
+          const { pathToFileURL, fileURLToPath } = require("node:url");
+          const { execFileSync } = require("node:child_process");
+          const binary = path.resolve("target/debug/examples/validation_cjs_graph");
+          const analyze = files => JSON.parse(execFileSync(binary, { input: JSON.stringify(files), encoding: "utf8" }));
+          const workspace = fs.mkdtempSync(path.join(os.tmpdir(), "craft-commonjs-oracle-"));
+          let passed = 0;
+          const filesAt = (name, files) => {
+            const root = path.join(workspace, name);
+            fs.mkdirSync(root, { recursive: true });
+            for (const [file, code] of files) {
+              const dest = path.join(root, file);
+              fs.mkdirSync(path.dirname(dest), { recursive: true });
+              fs.writeFileSync(dest, code);
+            }
+            return root;
+          };
+          const checkRequire = (name, importer, spec, files, expected, value) => {
+            const root = filesAt(name, files);
+            const req = createRequire(path.join(root, importer));
+            let actual = null;
+            try { actual = path.relative(root, req.resolve(spec)); }
+            catch (error) { assert.equal(error.code, "MODULE_NOT_FOUND"); }
+            assert.equal(actual, expected, name);
+            if (expected !== null) assert.equal(req(spec), value, name);
+            const graph = analyze(files);
+            const imports = graph.modules.find(m => m.path === importer).imports;
+            assert.equal(imports.length, 1, name);
+            assert.equal(imports[0].kind, "require", name);
+            assert.equal(imports[0].resolved ?? null, actual, name);
+            const edges = graph.edges.filter(e => e.from === "module:" + importer && e.kind === "require");
+            assert.deepEqual(edges.map(e => e.to), expected === null ? [] : ["module:" + actual], name);
+            passed++;
+          };
+          (async () => {
+            try {
+              for (const [index, suffix] of ["#release", "?raw"].entries()) {
+                const file = "worker" + suffix + ".js";
+                for (const [kind, spec] of [["explicit", "./" + file], ["extensionless", "./worker" + suffix]]) {
+                  checkRequire(kind + index, "main.js", spec, [
+                    ["main.js", "require(" + JSON.stringify(spec) + ");"],
+                    [file, 'module.exports = "literal";'],
+                    ["worker.js", 'module.exports = "stripped";'],
+                  ], file, "literal");
+                }
+                const nested = "src/dir" + suffix + "/child.js";
+                const spec = "./dir" + suffix + "/child.js";
+                checkRequire("directory" + index, "src/main.js", spec, [
+                  ["src/main.js", "require(" + JSON.stringify(spec) + ");"],
+                  [nested, 'module.exports = "nested";'],
+                  ["src/dir.js", 'module.exports = "wrong";'],
+                ], nested, "nested");
+                const missing = "./missing" + suffix;
+                checkRequire("missing" + index, "main.js", missing, [
+                  ["main.js", "require(" + JSON.stringify(missing) + ");"],
+                  ["missing.js", 'module.exports = "wrong";'],
+                ], null);
+                const entry = "app/entry" + suffix + ".js";
+                const files = [
+                  ["app/package.json", JSON.stringify({ main: "entry" + suffix + ".js" })],
+                  [entry, 'module.exports = "package-entry";'],
+                  ["app/entry.js", 'module.exports = "wrong";'],
+                ];
+                const root = filesAt("package" + index, files);
+                const req = createRequire(path.join(root, "driver.cjs"));
+                const actual = path.relative(root, req.resolve("./app"));
+                assert.equal(actual, entry);
+                assert.equal(req("./app"), "package-entry");
+                const graph = analyze(files);
+                assert.equal(graph.entry_points.main, actual);
+                assert.equal(graph.modules.find(m => m.path === entry).role, "package");
+                assert.equal(graph.modules.find(m => m.path === "app/entry.js").role, "unknown");
+                passed++;
+              }
+              checkRequire("percent-control", "main.js", "./worker%23release.js", [
+                ["main.js", "require('./worker%23release.js');"],
+                ["worker%23release.js", 'module.exports = "percent";'],
+                ["worker#release.js", 'module.exports = "hash";'],
+              ], "worker%23release.js", "percent");
+              checkRequire("ordinary-control", "src/main.js", "../shared/./actual", [
+                ["src/main.js", "require('../shared/./actual');"],
+                ["shared/actual.js", 'module.exports = "ordinary";'],
+              ], "shared/actual.js", "ordinary");
+              const esmFiles = [
+                ["main.mjs", "import { value } from './actual.mjs?cache#part'; export { value as again } from './actual.mjs?second#part'; export const dynamic = import('./actual.mjs?third#part');"],
+                ["actual.mjs", "export const value = 7; export const location = import.meta.url;"],
+              ];
+              const root = filesAt("esm-control", esmFiles);
+              const esm = await import(pathToFileURL(path.join(root, "main.mjs")).href);
+              assert.equal(esm.again, 7);
+              const dynamic = await esm.dynamic;
+              assert.equal(dynamic.value, 7);
+              assert.equal(fileURLToPath(dynamic.location), path.join(root, "actual.mjs"));
+              const graph = analyze(esmFiles);
+              const imports = graph.modules.find(m => m.path === "main.mjs").imports;
+              assert.equal(imports.length, 3);
+              assert.deepEqual(new Set(imports.map(i => i.kind)), new Set(["import", "re-export", "dynamic-import"]));
+              for (const imp of imports) assert.equal(imp.resolved, "actual.mjs");
+              passed++;
+              assert.equal(passed, 13);
+              console.log("All " + passed + " Node filename/application-graph comparisons passed (" + process.version + ")");
+            } finally {
+              fs.rmSync(workspace, { recursive: true, force: true });
+            }
+          })().catch(error => { console.error(error); process.exitCode = 1; });
+          
+          NODE
+      - name: Run strict all-target Clippy
+        run: cargo --config 'profile.dev.package."*".opt-level=0' clippy --locked -p craft-anything-js -p craft-anything-analysis --all-targets -- -D warnings
+      - name: Check repository contracts
+        run: |
+          cargo --config 'profile.dev.package."*".opt-level=0' xtask layers
+          cargo --config 'profile.dev.package."*".opt-level=0' xtask locks
+          cargo --config 'profile.dev.package."*".opt-level=0' xtask secrets
+      - name: Check all WebAssembly layers
+        run: cargo --config 'profile.dev.package."*".opt-level=0' xtask wasm
+      - name: Require formatting and an unchanged tree
+        run: |
+          cargo fmt --all -- --check
+          git diff --exit-code

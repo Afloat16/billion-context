@@ -1,0 +1,56 @@
+name: Craft Mach-O legacy version validation
+on:
+  push:
+    branches: [validation/craft-macho-legacy-20261111]
+permissions:
+  contents: read
+jobs:
+  formats:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: candidate
+    env:
+      CARGO_INCREMENTAL: "0"
+      CARGO_BUILD_JOBS: "2"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+      CARGO_PROFILE_DEV_OPT_LEVEL: "0"
+      CARGO_TERM_COLOR: never
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          path: validation
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: Afloat16/craft-anything
+          ref: 7897cd61d35b357e14f4cdf072c2f40180232dfb
+          path: candidate
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install Rust 1.99 with formatting, Clippy and WebAssembly support
+        run: |
+          rustup toolchain install 1.99.0 --profile minimal --component rustfmt --component clippy --target wasm32-unknown-unknown
+          rustup default 1.99.0
+          rustc --version
+      - name: Prove unchanged-source failures and passing controls
+        run: python3 "$GITHUB_WORKSPACE/validation/.github/validation/macho_legacy.py" baseline
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Run all formats tests
+        run: cargo --config 'profile.dev.package."*".opt-level=0' test --locked -p craft-anything-formats
+      - name: Run strict formats Clippy
+        run: cargo --config 'profile.dev.package."*".opt-level=0' clippy --locked -p craft-anything-formats --all-targets -- -D warnings
+      - name: Check repository layers, locks and secrets
+        run: |
+          cargo --config 'profile.dev.package."*".opt-level=0' xtask layers
+          cargo --config 'profile.dev.package."*".opt-level=0' xtask locks
+          cargo --config 'profile.dev.package."*".opt-level=0' xtask secrets
+      - name: Check the complete WebAssembly layer gate
+        run: cargo --config 'profile.dev.package."*".opt-level=0' xtask wasm
+      - name: Inspect real Clang cross-target objects when available
+        run: python3 "$GITHUB_WORKSPACE/validation/.github/validation/macho_legacy.py" clang
+      - name: Verify source and lockfile remain unchanged
+        run: git diff --exit-code

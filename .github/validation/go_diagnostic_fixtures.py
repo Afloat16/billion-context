@@ -73,12 +73,19 @@ def transformed(original, count):
     output.extend(bytes(offset - len(output)))
     output.extend(payload)
     struct.pack_into("<H", output, 56, phnum + 1)
-    struct.pack_into("<IIQQQQQQ", output, extra_header, 1, 6, offset, address, address, len(payload), len(payload), 4096)
-    for index in range(phnum):
-        at = phoff + index * phsize
-        if u32(original, at) == 6:  # PT_PHDR spans the additional load record too.
-            struct.pack_into("<Q", output, at + 32, (phnum + 1) * phsize)
-            struct.pack_into("<Q", output, at + 40, (phnum + 1) * phsize)
+    headers = [bytearray(original[phoff + index * phsize:phoff + (index + 1) * phsize])
+               for index in range(phnum)]
+    for header in headers:
+        if u32(header, 0) == 6:  # PT_PHDR spans the additional load record too.
+            struct.pack_into("<Q", header, 32, (phnum + 1) * phsize)
+            struct.pack_into("<Q", header, 40, (phnum + 1) * phsize)
+    # Keep load records in ascending virtual-address order and before the trailing
+    # zero-sized GNU_STACK record; Go 1.24's DataReader examines every program
+    # header, including that empty record, before selecting a later load.
+    insert_at = max(index for index, header in enumerate(headers) if u32(header, 0) == 1) + 1
+    headers.insert(insert_at, struct.pack("<IIQQQQQQ", 1, 6, offset, address, address,
+                                         len(payload), len(payload), 4096))
+    output[phoff:phoff + (phnum + 1) * phsize] = b"".join(headers)
     struct.pack_into("<Q", output, info["at"] + 16, address)
     struct.pack_into("<Q", output, info["at"] + 24, offset)
     struct.pack_into("<Q", output, info["at"] + 32, len(payload))

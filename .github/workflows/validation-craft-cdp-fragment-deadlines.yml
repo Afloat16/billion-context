@@ -23,7 +23,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: Afloat16/craft-anything
-          ref: ddd04f9364257878c46122078d2606d44e833d53
+          ref: 4fa9c60b9b4594b8c1a0376c445db627fa1e5c40
           fetch-depth: 0
           persist-credentials: false
       - name: Check native WebSocket availability
@@ -34,7 +34,7 @@ jobs:
           rustup default 1.99.0
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
         with:
-          key: craft-cdp-fragment-deadlines-full-v1
+          key: craft-cdp-fragment-deadlines-full-v2
           save-if: true
           cache-on-failure: true
       - name: Check formatting

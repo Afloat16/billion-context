@@ -1,0 +1,126 @@
+name: Gitignore component-star native baseline
+
+on:
+  push:
+    branches: [validation/craft-gitignore-component-stars-20261111]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  component-stars:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      CARGO_INCREMENTAL: "0"
+      CARGO_BUILD_JOBS: "2"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+      CARGO_PROFILE_DEV_OPT_LEVEL: "0"
+      CARGO_TERM_COLOR: never
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: Afloat16/craft-anything
+          ref: 3ce1ce9f52077a53811be8a0309fdbe85b16b417
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install Rust
+        run: |
+          rustup toolchain install 1.99.0 --profile minimal
+          rustup default 1.99.0
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
+        with:
+          key: craft-gitignore-component-stars-native-v1
+          save-if: true
+          cache-on-failure: true
+      - name: Compare public ignore matching with native Git
+        run: |
+          mkdir -p crates/analysis/examples
+          trap 'rm -f crates/analysis/examples/validation_gitignore_component_stars.rs' EXIT
+          cat > crates/analysis/examples/validation_gitignore_component_stars.rs <<'RS'
+          use craft_anything_analysis::js_source::Ignore;
+          use std::io::Read;
+          
+          fn main() {
+              let mut text = String::new();
+              std::io::stdin().read_to_string(&mut text).unwrap();
+              let input: serde_json::Value = serde_json::from_str(&text).unwrap();
+              let mut ignore = Ignore::default();
+              ignore.add_file("", input["rule"].as_str().unwrap());
+              let matches: Vec<bool> = input["paths"].as_array().unwrap().iter()
+                  .map(|path| ignore.is_ignored(path.as_str().unwrap(), false)).collect();
+              println!("{}", serde_json::to_string(&matches).unwrap());
+          }
+          RS
+          cargo --config 'profile.dev.package."*".opt-level=0' build --locked -p craft-anything-analysis --example validation_gitignore_component_stars
+          cat > /tmp/validation_gitignore_component_stars.py <<'PY'
+          import json
+          import os
+          import pathlib
+          import subprocess
+          import tempfile
+          
+          RULES = [
+              "root/a**/leaf", "root/**a/leaf", "root/a**b/leaf",
+              "root/pre***post/leaf", "root/a***/leaf", "root/***a/leaf",
+              "root/***/leaf", "root/****/leaf",
+              "root/**/leaf", "**/leaf", "root/**", "root/*/leaf", "root/ab*cd/leaf",
+              r"root/\**/leaf", r"root/*\*/leaf", r"root/**\/leaf",
+              r"root\/a**/leaf", r"root\/**/leaf", r"root/\*\*/leaf",
+              "root/**/a**/leaf", "root/**/**/leaf", "root/***/a**b/leaf",
+          ]
+          PATHS = [
+              "leaf", "deep/leaf", "root/leaf", "root/aleaf", "root/x/aleaf",
+              "root/a/leaf", "root/ab/leaf", "root/ax/leaf", "root/axb/leaf",
+              "root/x/a/leaf", "root/x/ax/leaf", "root/a/x/leaf", "root/a/x/b/leaf",
+              "root/x/a/x/b/leaf", "root/prepost/leaf", "root/pre/post/leaf",
+              "root/prexpost/leaf", "root/x/prepost/leaf", "root/abcd/leaf",
+              "root/abXcd/leaf", "root/ab/Xcd/leaf", "root/*/leaf", "root/**/leaf",
+              "root/***/leaf", "root/*x/leaf", "root/x*/leaf", "root/x/y/leaf",
+              "root/工具/leaf", "root/a工具/leaf", "root/a/工具/b/leaf",
+              "other/a/leaf", "root/x/other", "other/leaf",
+          ]
+          CONTROLS = {"root/**/leaf", "**/leaf", "root/**", "root/*/leaf", "root/ab*cd/leaf", r"root/\*\*/leaf"}
+          EXAMPLE = pathlib.Path("target/debug/examples/validation_gitignore_component_stars").resolve()
+          env = {**os.environ, "GIT_CONFIG_NOSYSTEM":"1", "GIT_CONFIG_GLOBAL":os.devnull}
+          results = []
+          with tempfile.TemporaryDirectory(prefix="craft-gitignore-components-") as folder:
+              root = pathlib.Path(folder)
+              subprocess.run(["git", "init", "-q", str(root)], check=True, env=env)
+              for rule in RULES:
+                  (root / ".gitignore").write_text(rule + "\n")
+                  result = subprocess.run(["git", "-C", str(root), "check-ignore", "--no-index", "-z", "--stdin"],
+                      input=b"".join(path.encode() + b"\0" for path in PATHS),
+                      stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
+                  assert result.returncode in (0, 1), result.stderr.decode()
+                  ignored = {path.decode() for path in result.stdout.split(b"\0") if path}
+                  expected = [path in ignored for path in PATHS]
+                  actual = json.loads(subprocess.check_output([str(EXAMPLE)],
+                      input=json.dumps({"rule":rule + "\n", "paths":PATHS}), text=True))
+                  assert len(actual) == len(expected)
+                  mismatches = [{"path":path, "git":a, "product":b} for path,a,b in zip(PATHS, expected, actual) if a != b]
+                  if rule in CONTROLS:
+                      assert not mismatches, (rule, mismatches)
+                  if os.getenv("EXPECT_FIXED"):
+                      assert not mismatches, (rule, mismatches)
+                  row = {"rule":rule, "paths":len(PATHS), "mismatches":mismatches}
+                  results.append(row)
+                  print(json.dumps(row, ensure_ascii=False), flush=True)
+          if not os.getenv("EXPECT_FIXED"):
+              observed = {(row["rule"], mismatch["path"]) for row in results for mismatch in row["mismatches"]}
+              required = {
+                  ("root/a**/leaf", "root/aleaf"),
+                  ("root/a**/leaf", "root/a/x/leaf"),
+                  ("root/**a/leaf", "root/x/a/leaf"),
+                  ("root/a**b/leaf", "root/a/x/b/leaf"),
+              }
+              assert required <= observed, observed
+          print(json.dumps({"git":subprocess.check_output(["git", "--version"], text=True).strip(),
+              "rules":len(RULES), "paths":len(PATHS), "comparisons":len(RULES)*len(PATHS),
+              "mismatches":sum(len(row["mismatches"]) for row in results), "control_rules":len(CONTROLS)}), flush=True)
+          PY
+          python3 /tmp/validation_gitignore_component_stars.py
+      - name: Require an unchanged source tree
+        run: test -z "$(git status --porcelain)"

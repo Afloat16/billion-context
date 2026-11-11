@@ -1,22 +1,13 @@
-name: Claude server prior-reply platform comparison
+name: Claude server prior-reply PostgreSQL gate
 on:
   push:
     branches: [validation/claude-server-prior-platform-20261111]
 permissions:
   contents: read
 jobs:
-  comparison:
-    name: server context on ${{ matrix.label }}
+  final-gate:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - label: baseline
-            ref: dc0e1817729a50e658b4e3e07ba31b9dc428bb50
-          - label: fixed
-            ref: c30e848c64f110b25565b14f5600470f9ad3970f
+    timeout-minutes: 20
     services:
       postgres:
         image: postgres:16
@@ -36,8 +27,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: Afloat16/claude-mem
-          ref: ${{ matrix.ref }}
-          fetch-depth: 2
+          ref: cd76750e70687de3dc03de46c406a0e3885d7d36
+          fetch-depth: 3
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
@@ -45,38 +36,17 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.4
+      - name: Verify the fully tested production code and relocated test are unchanged
+        run: |
+          git diff --exit-code c30e848c64f110b25565b14f5600470f9ad3970f HEAD -- src/
+          git show c30e848c64f110b25565b14f5600470f9ad3970f:tests/context/server-prior-transcript-platform.test.ts > /tmp/original-platform-test.ts
+          cmp /tmp/original-platform-test.ts tests/server/server-prior-transcript-platform.test.ts
       - name: Install repository dependencies
         run: npm install --no-audit --no-fund
-      - name: Reproduce the lost source on unchanged main
-        if: matrix.label == 'baseline'
-        shell: bash
+      - name: Verify final PostgreSQL regression and lane ownership
         run: |
-          set +e
-          bun test tests/context/server-prior-transcript-platform.test.ts --timeout 60000 2>&1 | tee /tmp/server-prior-baseline.log
-          result=${PIPESTATUS[0]}
-          set -e
-          test "$result" -eq 1
-          grep -F '4 fail' /tmp/server-prior-baseline.log
-          grep -F '2 pass' /tmp/server-prior-baseline.log
-      - name: Verify PostgreSQL HTTP to native prior-reply rendering
-        if: matrix.label == 'fixed'
-        run: bun test tests/context/server-prior-transcript-platform.test.ts --timeout 60000
-      - name: Verify context selection and existing server routes
-        if: matrix.label == 'fixed'
-        run: >-
-          bun test
-          tests/context/prior-transcript-platform.test.ts
-          tests/context/server-context-mode-filters.test.ts
-          tests/server/session-start-context-from-store.test.ts
-          tests/server/context-recency-mode.test.ts
-          tests/server/runtime/server-viewer-data-routes.test.ts
-          --timeout 60000
-      - name: Check root and viewer TypeScript
-        if: matrix.label == 'fixed'
-        run: npm run typecheck
-      - name: Build all shipped bundles
-        if: matrix.label == 'fixed'
-        run: node scripts/build-hooks.js
-      - name: Check patch whitespace
-        if: matrix.label == 'fixed'
+          bun test tests/server/server-prior-transcript-platform.test.ts --timeout 60000
+          bun scripts/test-lanes.ts check
+          git grep -l -F 'process.env.CLAUDE_MEM_TEST_POSTGRES_URL' -- tests/server tests/storage tests/cli/server-jobs.test.ts tests/compat | grep -Fx 'tests/server/server-prior-transcript-platform.test.ts'
+      - name: Check final patch whitespace
         run: git diff --check 308a9ab4a141ac49ca0e72bbccc0c9cdf3770ca0 HEAD

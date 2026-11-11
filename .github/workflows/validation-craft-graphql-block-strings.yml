@@ -62,6 +62,7 @@ jobs:
           node <<'NODE'
           const assert = require("node:assert/strict");
           const path = require("node:path");
+          const { isDeepStrictEqual } = require("node:util");
           const { execFileSync } = require("node:child_process");
           const { parse, version } = require(path.join(process.env.RUNNER_TEMP, "craft-graphql-block-reference/node_modules/graphql"));
           const binary = path.resolve("target/debug/examples/validation_graphql_blocks");
@@ -114,7 +115,7 @@ jobs:
             const actual = JSON.parse(execFileSync(binary, { input: fixture.document, encoding: "utf8" }));
             const paths = { direct: actual.direct, parsed: normalize(actual.parsed), fallback: normalize(actual.fallback) };
             const mismatches = Object.entries(paths).filter(([name, got]) =>
-              JSON.stringify(got) !== JSON.stringify(name === "direct" ? expected : (expected ?? []))).map(([name]) => name);
+              !isDeepStrictEqual(got, name === "direct" ? expected : (expected ?? []))).map(([name]) => name);
             const row = { label: fixture.label, valid: fixture.valid, expected, actual: paths, mismatches };
             rows.push(row);
             console.log("GRAPHQL_BLOCK_ROW " + JSON.stringify(row));

@@ -1,0 +1,25 @@
+name: Claude native signature patch and lane verification
+on:
+  push:
+    branches: [validation/claude-native-signature-patch-20261111]
+permissions:
+  contents: read
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: Afloat16/claude-mem
+          ref: cbd3ebc68f0db271e60250040c5238c4cce48231
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - name: Verify final patch against the explicitly fetched fixed base
+        run: |
+          test "$(git rev-parse HEAD)" = "cbd3ebc68f0db271e60250040c5238c4cce48231"
+          git fetch --no-tags --depth=1 origin 308a9ab4a141ac49ca0e72bbccc0c9cdf3770ca0
+          git diff --check 308a9ab4a141ac49ca0e72bbccc0c9cdf3770ca0 HEAD
+          bun scripts/test-lanes.ts check

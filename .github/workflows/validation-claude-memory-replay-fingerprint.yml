@@ -1,0 +1,83 @@
+name: Claude native memory replay lookup comparison
+on:
+  push:
+    branches: [validation/claude-memory-replay-fingerprint-20261111]
+permissions:
+  contents: read
+jobs:
+  comparison:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CLAUDE_MEM_DATA_DIR: ${{ runner.temp }}/claude-replay-data
+      CLAUDE_CONFIG_DIR: ${{ runner.temp }}/claude-replay-config
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: Afloat16/claude-mem
+          ref: e67d298cc5990648504c10edcc1a7fed407ab0b6
+          fetch-depth: 3
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - name: Install repository dependencies
+        run: npm install --no-audit --no-fund
+      - name: Record unchanged-main semantics and lookup plan
+        shell: bash
+        run: |
+          git checkout --detach 6f8a1b80a50e3694d423ac9b90866d21cae393e6
+          set +e
+          bun test tests/memory/replay-fingerprint-index.test.ts 2>&1 | tee "$RUNNER_TEMP/replay-baseline-tests.log"
+          result=${PIPESTATUS[0]}
+          set -e
+          test "$result" -eq 1
+          grep -F '4 pass' "$RUNNER_TEMP/replay-baseline-tests.log"
+          grep -F '1 fail' "$RUNNER_TEMP/replay-baseline-tests.log"
+          grep -F 'seeks by project and fingerprint' "$RUNNER_TEMP/replay-baseline-tests.log"
+      - name: Measure unchanged-main replay lookups
+        run: bun tests/fixtures/memory/replay-lookup-benchmark.ts "$RUNNER_TEMP/replay-baseline"
+      - name: Check indexed lookup semantics and plan
+        run: |
+          git checkout --detach e67d298cc5990648504c10edcc1a7fed407ab0b6
+          bun test tests/memory/replay-fingerprint-index.test.ts
+      - name: Measure indexed replay lookups
+        run: bun tests/fixtures/memory/replay-lookup-benchmark.ts "$RUNNER_TEMP/replay-fixed"
+      - name: Compare every returned replay object
+        run: |
+          node --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
+          import fs from 'node:fs';
+          import path from 'node:path';
+          const read = name => JSON.parse(fs.readFileSync(path.join(process.env.RUNNER_TEMP, name, 'result.json'), 'utf8'));
+          const baseline = read('replay-baseline');
+          const fixed = read('replay-fixed');
+          assert.deepEqual(fixed.results, baseline.results);
+          assert.equal(fixed.resultHash, baseline.resultHash);
+          assert.equal(fixed.rowCount, baseline.rowCount);
+          console.log(JSON.stringify({ equality: 'all complete replay objects match', resultHash: fixed.resultHash,
+            baselineMs: baseline.samplesMs, fixedMs: fixed.samplesMs,
+            baselineMedianMs: baseline.medianMs, fixedMedianMs: fixed.medianMs,
+            baselineReopenMs: baseline.reopenMs, fixedReopenMs: fixed.reopenMs }));
+          JS
+      - name: Run memory migration and projection regressions
+        run: >-
+          bun test tests/memory
+          tests/worker/manual-memory-source-scoping.test.ts
+          tests/worker/manual-memory-after-session-delete.test.ts
+          tests/worker/http/routes/memory-ingest-routes.test.ts
+          tests/sqlite/session-store-migrations.test.ts
+          tests/sqlite/project-key-case.test.ts
+          tests/worker/work-view/agent-view-media.test.ts
+          --timeout 30000
+      - name: Check root and viewer TypeScript
+        run: npm run typecheck
+      - name: Build all shipped bundles
+        run: node scripts/build-hooks.js
+      - name: Check patch and lane ownership
+        run: |
+          git diff --check 308a9ab4a141ac49ca0e72bbccc0c9cdf3770ca0 HEAD
+          bun scripts/test-lanes.ts check

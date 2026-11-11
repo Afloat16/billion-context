@@ -1,0 +1,57 @@
+name: Craft SQLite schema completeness validation
+on:
+  push:
+    branches: [validation/craft-sqlite-schema-completeness-20261111]
+permissions:
+  contents: read
+jobs:
+  schema:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 70
+    defaults:
+      run:
+        working-directory: candidate
+    env:
+      CARGO_INCREMENTAL: "0"
+      CARGO_BUILD_JOBS: "2"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+      CARGO_PROFILE_DEV_OPT_LEVEL: "0"
+      CARGO_TERM_COLOR: never
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          path: validation
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: Afloat16/craft-anything
+          ref: 98561b89f9792c0c7a42d5e27a5d16aa70936b69
+          path: candidate
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Install CI Rust, formatting, Clippy and WebAssembly support
+        run: |
+          rustup toolchain install 1.99.0 --profile minimal --component rustfmt --component clippy --target wasm32-unknown-unknown
+          rustup default 1.99.0
+          rustc --version
+      - name: Check formatting before compilation
+        run: cargo fmt --all -- --check
+      - name: Prove original failures and fixed behavior with real SQLite files
+        run: python3 "$GITHUB_WORKSPACE/validation/.github/validation/sqlite_schema_validation.py"
+      - name: Run all tests in every touched crate
+        run: cargo --config 'profile.dev.package."*".opt-level=0' test --locked -p craft-anything-formats -p craft-anything-engine -p craft-anything-testkit
+      - name: Run strict all-target Clippy in every touched crate
+        run: cargo --config 'profile.dev.package."*".opt-level=0' clippy --locked -p craft-anything-formats -p craft-anything-engine -p craft-anything-testkit --all-targets -- -D warnings
+      - name: Check layers, locks and secrets
+        run: |
+          cargo --config 'profile.dev.package."*".opt-level=0' xtask layers
+          cargo --config 'profile.dev.package."*".opt-level=0' xtask locks
+          cargo --config 'profile.dev.package."*".opt-level=0' xtask secrets
+      - name: Check complete WebAssembly layer gate
+        run: cargo --config 'profile.dev.package."*".opt-level=0' xtask wasm
+      - name: Verify exact source and patch whitespace
+        run: |
+          git diff --check 35f11365026263f43884eadc9ec3296b99893ba1 HEAD
+          git diff --exit-code
+          test -z "$(git ls-files --others --exclude-standard)"

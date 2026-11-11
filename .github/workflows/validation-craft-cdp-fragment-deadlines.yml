@@ -1,4 +1,4 @@
-name: CDP fragment deadline baseline against native WebSocket
+name: CDP fragment deadline full validation
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
 jobs:
   cdp-fragments:
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 75
     env:
       CARGO_INCREMENTAL: "0"
       CARGO_BUILD_JOBS: "2"
@@ -23,21 +23,56 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: Afloat16/craft-anything
-          ref: 06342656204c5ef25d145ec632468914d2a2982e
+          ref: ddd04f9364257878c46122078d2606d44e833d53
           fetch-depth: 0
           persist-credentials: false
       - name: Check native WebSocket availability
         run: node -p 'typeof WebSocket'
       - name: Install Rust
         run: |
-          rustup toolchain install 1.99.0 --profile minimal
+          rustup toolchain install 1.99.0 --profile minimal --component rustfmt --component clippy --target wasm32-unknown-unknown
           rustup default 1.99.0
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
         with:
-          key: craft-cdp-fragment-deadlines-v1
+          key: craft-cdp-fragment-deadlines-full-v1
           save-if: true
           cache-on-failure: true
-      - name: Reproduce fragmented events lost at observation deadlines
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Reproduce original public-client fragment loss
+        run: |
+          python3 - <<'PY'
+          import pathlib
+          import subprocess
+          path = pathlib.Path("crates/engines/src/cdp.rs")
+          fixed = path.read_bytes()
+          failures = {
+              "observation_deadlines_preserve_text_binary_utf8_and_empty_first_fragments",
+              "repeated_observation_windows_keep_all_previous_fragments",
+              "cancellation_after_an_observed_prefix_can_resume_with_a_fresh_token",
+              "pings_between_fragments_work_on_both_sides_of_the_deadline",
+              "aggregate_message_limits_still_apply_after_resuming",
+              "a_new_data_frame_cannot_replace_an_unfinished_message_after_a_deadline",
+          }
+          try:
+              path.write_bytes(subprocess.check_output(["git", "show", "3ce1ce9f52077a53811be8a0309fdbe85b16b417:" + path.as_posix()]))
+              result = subprocess.run(
+                  ["cargo", "--config", 'profile.dev.package."*".opt-level=0', "test", "--locked",
+                   "-p", "craft-anything-engines", "--test", "cdp_fragment_deadlines", "--", "--nocapture"],
+                  text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+              )
+              print(result.stdout, end="")
+              if result.returncode == 0 or "test result: FAILED. 3 passed; 6 failed;" not in result.stdout:
+                  raise SystemExit("Expected six fragment regressions and three controls on the unchanged client")
+              listed = result.stdout.rsplit("failures:", 1)[-1].split("test result:", 1)[0]
+              actual = {line.strip() for line in listed.splitlines() if line.strip()}
+              assert actual == failures, actual
+          finally:
+              path.write_bytes(fixed)
+          PY
+      - name: Run the complete external-engine suite
+        run: cargo --config 'profile.dev.package."*".opt-level=0' test --locked -p craft-anything-engines
+      - name: Compare resumed CDP messages against native WebSocket
         run: |
           mkdir -p crates/engines/examples
           trap 'rm -f crates/engines/examples/validation_cdp_fragments.rs' EXIT
@@ -170,5 +205,19 @@ jobs:
           console.log("CDP fragmented event / Node "+process.version+": "+JSON.stringify(outcomes));
           console.log("CDP cases="+outcomes.length+" lost_fragment_cases="+outcomes.filter(x=>!x.production_ok).length);
           JS
-          node /tmp/validation_cdp_fragments.mjs
+          EXPECT_FIXED=1 node /tmp/validation_cdp_fragments.mjs
+          git diff --exit-code
+      - name: Run strict all-target Clippy
+        run: cargo --config 'profile.dev.package."*".opt-level=0' clippy --locked -p craft-anything-engines --all-targets -- -D warnings
+      - name: Check repository contracts
+        run: |
+          cargo --config 'profile.dev.package."*".opt-level=0' xtask layers
+          cargo --config 'profile.dev.package."*".opt-level=0' xtask locks
+          cargo --config 'profile.dev.package."*".opt-level=0' xtask secrets
+      - name: Check all WebAssembly layers
+        run: cargo --config 'profile.dev.package."*".opt-level=0' xtask wasm
+      - name: Require formatting and an unchanged source tree
+        run: |
+          cargo fmt --all -- --check
+          git diff --check
           git diff --exit-code

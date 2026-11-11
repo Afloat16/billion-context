@@ -15,10 +15,22 @@ jobs:
         include:
           - label: unchanged-main
             sha: 22d148ea6f34b86ea9a6e0911c7a7a0c71431b31
+            tests: b7ce631a931667faf6be54f9833830684a40ef3b
             baseline: true
-          - label: native-word-fix
+            failures: 11
+            passes: 8
+          - label: before-atomic-cleanup
             sha: b7ce631a931667faf6be54f9833830684a40ef3b
+            tests: 2dc9cc3b0678dd0c2f61c85c3cefa4b8c65a0b95
+            baseline: true
+            failures: 1
+            passes: 20
+          - label: atomic-native-word-fix
+            sha: 2dc9cc3b0678dd0c2f61c85c3cefa4b8c65a0b95
+            tests: 2dc9cc3b0678dd0c2f61c85c3cefa4b8c65a0b95
             baseline: false
+            failures: 0
+            passes: 21
     steps:
       - uses: actions/checkout@v4
         with:
@@ -30,7 +42,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: Afloat16/claude-mem
-          ref: b7ce631a931667faf6be54f9833830684a40ef3b
+          ref: ${{ matrix.tests }}
           path: regressions
           sparse-checkout: tests/services/sqlite/search-fts-unicode-frequency.test.ts
           sparse-checkout-cone-mode: false
@@ -49,6 +61,8 @@ jobs:
         working-directory: subject
         env:
           BASELINE: ${{ matrix.baseline }}
+          EXPECT_FAILURES: ${{ matrix.failures }}
+          EXPECT_PASSES: ${{ matrix.passes }}
         run: |
           cp ../regressions/tests/services/sqlite/search-fts-unicode-frequency.test.ts tests/services/sqlite/search-fts-unicode-frequency.test.ts
           set +e
@@ -57,8 +71,8 @@ jobs:
           set -e
           if [ "$BASELINE" = "true" ]; then
             test "$status" -eq 1
-            grep -q '12 fail' unicode-regressions.log
-            grep -q '7 pass' unicode-regressions.log
+            grep -q " $EXPECT_FAILURES fail" unicode-regressions.log
+            grep -q " $EXPECT_PASSES pass" unicode-regressions.log
           else
             test "$status" -eq 0
           fi

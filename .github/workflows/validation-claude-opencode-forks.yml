@@ -1,0 +1,65 @@
+name: Claude OpenCode fork activity comparison
+on:
+  push:
+    branches: [validation/claude-opencode-fork-history-20261111]
+permissions:
+  contents: read
+jobs:
+  fixed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: Afloat16/claude-mem
+          ref: ba9916b9cdcb8cc036279c87fbe27651f32a3f43
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - name: Install repository dependencies
+        run: npm install --no-audit --no-fund
+      - name: Verify native fork ownership, usage, boundary and old layouts
+        run: bun test tests/services/prompt-import/opencode-fork-history.test.ts --timeout 30000
+      - name: Run related native import suites
+        run: bun test tests/services/prompt-import/ --timeout 30000
+      - name: Check root and viewer TypeScript
+        run: npm run typecheck
+      - name: Build all shipped bundles
+        run: node scripts/build-hooks.js
+      - name: Check patch and test lane ownership
+        run: |
+          git diff --check 308a9ab4a141ac49ca0e72bbccc0c9cdf3770ca0 HEAD
+          bun scripts/test-lanes.ts check
+  baseline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: Afloat16/claude-mem
+          ref: b61344de33d34ebd00cf87657a123ff6daade62b
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - name: Install repository dependencies
+        run: npm install --no-audit --no-fund
+      - name: Reproduce copied prompt and token replay on unchanged main
+        shell: bash
+        run: |
+          set +e
+          bun test tests/services/prompt-import/opencode-fork-history.test.ts --timeout 30000 2>&1 | tee /tmp/opencode-fork-baseline.log
+          result=${PIPESTATUS[0]}
+          set -e
+          test "$result" -eq 1
+          grep -F '4 fail' /tmp/opencode-fork-baseline.log
+          grep -F '2 pass' /tmp/opencode-fork-baseline.log

@@ -23,7 +23,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: Afloat16/craft-anything
-          ref: cb2749e16b64652e85d09b885e9cf2a4de1792c9
+          ref: b6ba499be2fddc38007dc5913e05dd30714e5432
           fetch-depth: 0
           persist-credentials: false
       - name: Install the validated Rust toolchain

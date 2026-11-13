@@ -1,0 +1,59 @@
+name: Windows Node 22 zstd validation
+
+on:
+  push:
+    branches: [2026-11-13_validate-zstd-windows22]
+
+permissions:
+  contents: read
+
+jobs:
+  zstd-windows22:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    env:
+      CI: 'true'
+      npm_config_fetch_retries: '5'
+      npm_config_fetch_retry_mintimeout: '5000'
+      npm_config_fetch_retry_maxtimeout: '60000'
+    steps:
+      - name: Check out exact PR source
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: 7341f7d1194762097dbc266e524a1c1886d82ae7
+          persist-credentials: false
+      - name: Set up exact Node version
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: 22.23.4
+          cache: npm
+      - name: Verify source and runtime
+        run: |
+          test "$(git rev-parse HEAD)" = "7341f7d1194762097dbc266e524a1c1886d82ae7"
+          node -e "if (process.version !== 'v22.23.4' || process.platform !== 'win32') process.exit(1); console.log(process.version, process.platform, process.arch)"
+          npm --version
+          mkdir -p validation-logs
+      - name: Install locked dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund 2>&1 | tee validation-logs/install.log
+      - name: Build kernel and pi-subagents prerequisites
+        run: npm run pretypecheck 2>&1 | tee validation-logs/prerequisites.log
+      - name: Run six zstd and request decoding suites
+        run: |
+          node --import ./tests/preload-test-env.mjs --import tsx --test \
+            tests/content-encoding-zstd.test.ts \
+            tests/content-encoding.test.ts \
+            tests/request-body-budget.test.ts \
+            tests/decode-fail-passthrough.test.ts \
+            tests/issue4829-zstd-fork-gate.test.ts \
+            tests/issue5794-ingest-cap.test.ts 2>&1 | tee validation-logs/tests.log
+      - name: Archive validation logs
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: zstd-windows22-7341f7d1
+          path: validation-logs/
+          if-no-files-found: warn
+          retention-days: 14

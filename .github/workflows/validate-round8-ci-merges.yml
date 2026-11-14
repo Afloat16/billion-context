@@ -1,0 +1,48 @@
+name: Validate requested ci-fixes integrations
+on:
+  push:
+    branches: ["2026-11-14_validate-ci-fixes-6556-6566"]
+permissions:
+  contents: read
+jobs:
+  validate:
+    name: PR ${{ matrix.pr }} exact merge validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - pr: 6556
+            source: baea1e3d57a8265e3ff6977e7494f48b55d29d6b
+          - pr: 6566
+            source: 1dd16c35a911b831633f1b06ec033a0a477fbe7b
+    env:
+      npm_config_fetch_retries: '5'
+      npm_config_fetch_retry_mintimeout: '5000'
+      npm_config_fetch_retry_maxtimeout: '60000'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: harness
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.source }}
+          path: source
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: source/package-lock.json
+      - name: Validate exact merge source
+        working-directory: source
+        run: python ../harness/.github/validation/round8-ci-merges/validate.py ../harness/.github/validation/round8-ci-merges/manifest.json ${{ matrix.pr }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: billion-ci-merge-${{ matrix.pr }}
+          path: ${{ runner.temp }}/billion-ci-merge-${{ matrix.pr }}
+          if-no-files-found: error

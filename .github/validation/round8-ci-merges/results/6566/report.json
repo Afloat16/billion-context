@@ -1,0 +1,42 @@
+{
+  "pr": 6566,
+  "actual_pr_head": "9ea11fbbcbfbb66e69fbf3443dbf2258e4f1b077",
+  "original_feature_head": "7da680cfc9331f3a6125e6280ca825c0869c8b8f",
+  "parents": [
+    "7da680cfc9331f3a6125e6280ca825c0869c8b8f",
+    "1ff89e878522f3e4d4147067973e2dc26e648923",
+    "1ca40871581c5009fdb69eea944f448d002098e7"
+  ],
+  "source_changes_from_validated_candidate": [
+    "src/update.ts",
+    "tests/update-inplace-symlink-layout.test.ts"
+  ],
+  "source_changes_match_upstream_master": "1ff89e878522f3e4d4147067973e2dc26e648923",
+  "feature_blobs_unchanged": {
+    "src/agent/pi-inline.ts": "68a1290378af10c780162f03a1fa257d1ea68139",
+    "tests/pi-inline-fallback-request.test.ts": "992558d4b87f3d3b2b461e2a765e899f3edd1ed5"
+  },
+  "environment": {
+    "node": "v24.22.1",
+    "platform": "Linux",
+    "registry_network": "disabled before outbound call using existing _setRegistryFetchForTest; committed snapshot fallback; loopback HTTP fixtures exercised"
+  },
+  "test_files": [
+    "tests/pi-inline-fallback-request.test.ts",
+    "tests/pi-inline.test.ts",
+    "tests/inline-streaming.test.ts",
+    "tests/notice-registry.test.ts",
+    "tests/update-inplace-symlink-layout.test.ts"
+  ],
+  "test_runner_exit": 0,
+  "counts": {
+    "tests": 28,
+    "pass": 28,
+    "fail": 0,
+    "cancelled": 0,
+    "skipped": 0
+  },
+  "tracked_clean": true,
+  "log_sha256": "e11833f7ded2ad829a373795cdd2df386333f7f796d4c75ecea76010bce4c922",
+  "scope": "Targeted current-head tests only; full hosted CI, real-model E2E and Windows results are separate. Current head was updated by a concurrent external actor; this validation did not push or rewrite it."
+}

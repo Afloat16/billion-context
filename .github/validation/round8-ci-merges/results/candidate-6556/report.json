@@ -1,0 +1,179 @@
+{
+  "pr": 6556,
+  "source": "baea1e3d57a8265e3ff6977e7494f48b55d29d6b",
+  "parent": "e3b2a8122c40d7d44a2725530f3977fc6833f939",
+  "upstream": "1ca40871581c5009fdb69eea944f448d002098e7",
+  "commands": [
+    {
+      "name": "node-version",
+      "argv": [
+        "node",
+        "--version"
+      ],
+      "exit": 0
+    },
+    {
+      "name": "npm-version",
+      "argv": [
+        "npm",
+        "--version"
+      ],
+      "exit": 0
+    },
+    {
+      "name": "install",
+      "argv": [
+        "npm",
+        "ci",
+        "--ignore-scripts",
+        "--no-fund",
+        "--no-audit"
+      ],
+      "exit": 0
+    },
+    {
+      "name": "typecheck",
+      "argv": [
+        "npm",
+        "run",
+        "typecheck"
+      ],
+      "exit": 0
+    },
+    {
+      "name": "build",
+      "argv": [
+        "npm",
+        "run",
+        "build"
+      ],
+      "exit": 0
+    },
+    {
+      "name": "unused-exports",
+      "argv": [
+        "npm",
+        "run",
+        "check:unused-exports"
+      ],
+      "exit": 0
+    },
+    {
+      "name": "test-import-graph",
+      "argv": [
+        "npm",
+        "run",
+        "check:test-import-graph"
+      ],
+      "exit": 0
+    },
+    {
+      "name": "diff-check",
+      "argv": [
+        "git",
+        "diff",
+        "--check",
+        "1ca40871581c5009fdb69eea944f448d002098e7",
+        "HEAD"
+      ],
+      "exit": 0
+    },
+    {
+      "name": "feature-and-adjacent",
+      "argv": [
+        "node",
+        "--import",
+        "./tests/preload-storage-baseline.mjs",
+        "--import",
+        "./tests/preload-test-env.mjs",
+        "--import",
+        "./tests/preload-zone-slot.mjs",
+        "--import",
+        "tsx",
+        "--test",
+        "--test-concurrency=1",
+        "tests/native-request-signal.test.ts",
+        "tests/pi-inline.test.ts",
+        "tests/inline-streaming.test.ts"
+      ],
+      "exit": 0
+    },
+    {
+      "name": "notice-parent",
+      "argv": [
+        "node",
+        "--import",
+        "./tests/preload-storage-baseline.mjs",
+        "--import",
+        "./tests/preload-test-env.mjs",
+        "--import",
+        "./tests/preload-zone-slot.mjs",
+        "--import",
+        "tsx",
+        "--test",
+        "--test-reporter=tap",
+        "--test-concurrency=1",
+        "tests/notice-registry.test.ts"
+      ],
+      "exit": 1
+    },
+    {
+      "name": "notice-restored",
+      "argv": [
+        "node",
+        "--import",
+        "./tests/preload-storage-baseline.mjs",
+        "--import",
+        "./tests/preload-test-env.mjs",
+        "--import",
+        "./tests/preload-zone-slot.mjs",
+        "--import",
+        "tsx",
+        "--test",
+        "--test-reporter=tap",
+        "--test-concurrency=1",
+        "tests/notice-registry.test.ts"
+      ],
+      "exit": 0
+    },
+    {
+      "name": "source-unchanged",
+      "argv": [
+        "git",
+        "diff",
+        "--exit-code"
+      ],
+      "exit": 0
+    }
+  ],
+  "feature_sha256": {
+    "src/agent/native-intercept.ts": "1d15bec24fe5c0db5662acb25c82ea2d1785857a4060531039fa85c57096d693",
+    "tests/native-request-signal.test.ts": "93d17d34f15ca1c2fa61f03a86502eb3e4f9850409c65a16d23f5411dfcf85b9"
+  },
+  "node": "v24.22.1",
+  "npm": "npm warn Unknown env config \"http-proxy\". This will stop working in the next major version of npm.\n11.9.0",
+  "status": "passed",
+  "tracked_clean": true,
+  "harness_note": "Initial Node 24 spec output passed; the parser was corrected and existing successful command logs were preserved. Remaining notice probes were then completed.",
+  "feature-and-adjacent": {
+    "tests": 20,
+    "pass": 20,
+    "fail": 0,
+    "cancelled": 0,
+    "skipped": 0
+  },
+  "notice-parent": {
+    "tests": 5,
+    "pass": 3,
+    "fail": 2,
+    "cancelled": 0,
+    "skipped": 0
+  },
+  "notice-restored": {
+    "tests": 5,
+    "pass": 5,
+    "fail": 0,
+    "cancelled": 0,
+    "skipped": 0
+  }
+}

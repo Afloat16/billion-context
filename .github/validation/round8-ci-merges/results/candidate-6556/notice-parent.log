@@ -1,0 +1,97 @@
+TAP version 13
+# Subtest: registry: unique ids, valid tones, every key resolves in both locales
+ok 1 - registry: unique ids, valid tones, every key resolves in both locales
+  ---
+  duration_ms: 2.054121
+  type: 'test'
+  ...
+# Subtest: visibleNotices: fresh install sees the default flip + pck + wm intro, registry order (iot absent ⇒ hidden)
+not ok 2 - visibleNotices: fresh install sees the default flip + pck + wm intro, registry order (iot absent ⇒ hidden)
+  ---
+  duration_ms: 3.713027
+  type: 'test'
+  location: '/workspace/scratch/2d524b759857/round8-billion-6556/tests/notice-registry.test.ts:1:1608'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly deep-equal:
+    + actual - expected
+    
+      [
+        'pck-default-off',
+        'wm-fastpath-intro',
+    -   'storage-sqlite-default'
+      ]
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+    0: 'pck-default-off'
+    1: 'wm-fastpath-intro'
+    2: 'storage-sqlite-default'
+  actual:
+    0: 'pck-default-off'
+    1: 'wm-fastpath-intro'
+  operator: 'deepStrictEqual'
+  stack: |-
+    TestContext.<anonymous> (/workspace/scratch/2d524b759857/round8-billion-6556/tests/notice-registry.test.ts:42:12)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1402:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+    Test.postRun (node:internal/test_runner/test:1542:19)
+    Test.run (node:internal/test_runner/test:1467:12)
+    async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)
+  ...
+# Subtest: storage-sqlite-default notice id is a dismissible builtin (no 400 on close)
+ok 3 - storage-sqlite-default notice id is a dismissible builtin (no 400 on close)
+  ---
+  duration_ms: 0.661135
+  type: 'test'
+  ...
+# Subtest: iot notice id is a dismissible builtin (no 400 on close)
+ok 4 - iot notice id is a dismissible builtin (no 400 on close)
+  ---
+  duration_ms: 0.443738
+  type: 'test'
+  ...
+# Subtest: visibleNotices: dismissing one hides only that one
+not ok 5 - visibleNotices: dismissing one hides only that one
+  ---
+  duration_ms: 1.088277
+  type: 'test'
+  location: '/workspace/scratch/2d524b759857/round8-billion-6556/tests/notice-registry.test.ts:1:2273'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly deep-equal:
+    + actual - expected
+    
+      [
+        'pck-default-off',
+    -   'storage-sqlite-default'
+      ]
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+    0: 'pck-default-off'
+    1: 'storage-sqlite-default'
+  actual:
+    0: 'pck-default-off'
+  operator: 'deepStrictEqual'
+  stack: |-
+    TestContext.<anonymous> (/workspace/scratch/2d524b759857/round8-billion-6556/tests/notice-registry.test.ts:59:12)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1402:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+    Test.postRun (node:internal/test_runner/test:1542:19)
+    Test.run (node:internal/test_runner/test:1467:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:974:7)
+  ...
+1..5
+# tests 5
+# suites 0
+# pass 3
+# fail 2
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1085.974604

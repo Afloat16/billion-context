@@ -5,6 +5,18 @@ entry=next(x for x in manifest if str(x["number"])==sys.argv[2])
 out=pathlib.Path(os.environ["RUNNER_TEMP"])/("billion-ci-merge-"+sys.argv[2])
 out.mkdir(exist_ok=True)
 report={"pr":entry["number"],"source":entry["source"],"parent":entry["parent"],"upstream":entry["upstream"],"commands":[]}
+resume=len(sys.argv)>3 and sys.argv[3]=="--resume-after-spec-parser"
+if resume:
+    prior_report=json.loads((out/"report.json").read_text())
+    assert prior_report.get("error")=="feature-and-adjacent: absent TAP tests"
+    assert all(prior_report[k]==report[k] for k in ["pr","source","parent","upstream"])
+    assert prior_report["tracked_clean"] is True
+    assert [x["name"] for x in prior_report["commands"]]==["node-version","npm-version","install","typecheck","build","unused-exports","test-import-graph","diff-check","feature-and-adjacent"]
+    assert all(x["exit"]==0 for x in prior_report["commands"])
+    (out/"initial-report.json").write_text(json.dumps(prior_report,indent=2))
+    report=prior_report
+    report.pop("error")
+    report["harness_note"]="Initial Node 24 spec output passed; the parser was corrected and existing successful command logs were preserved. Remaining notice probes were then completed."
 def run(args, name, expected=0):
     result=subprocess.run(args, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     (out/(name+".log")).write_text(result.stdout)
@@ -16,16 +28,18 @@ def run(args, name, expected=0):
     return result.stdout
 def git(*args):
     return subprocess.check_output(["git",*args],text=True).strip()
-def tap(name, files, passed, failed=0):
-    args=["node","--import","./tests/preload-storage-baseline.mjs","--import","./tests/preload-test-env.mjs","--import","./tests/preload-zone-slot.mjs","--import","tsx","--test","--test-concurrency=1",*files]
-    text=run(args,name,1 if failed else 0)
+def counts_from_output(name, text, passed, failed=0):
     counts={}
     for key in ["tests","pass","fail","cancelled","skipped"]:
-        matches=re.findall(r"^# "+key+r" (\d+)\s*$",text,re.M)
-        if not matches: raise AssertionError(name+": absent TAP "+key)
+        matches=re.findall(r"^(?:#|ℹ) "+key+r" (\d+)\s*$",text,re.M)
+        if not matches: raise AssertionError(name+": absent test count "+key)
         counts[key]=int(matches[-1])
-    assert counts["pass"]==passed and counts["fail"]==failed and counts["skipped"]==0 and counts["cancelled"]==0, counts
+    assert counts["tests"]==passed+failed and counts["pass"]==passed and counts["fail"]==failed and counts["skipped"]==0 and counts["cancelled"]==0, counts
     report[name]=counts
+def tap(name, files, passed, failed=0):
+    args=["node","--import","./tests/preload-storage-baseline.mjs","--import","./tests/preload-test-env.mjs","--import","./tests/preload-zone-slot.mjs","--import","tsx","--test","--test-reporter=tap","--test-concurrency=1",*files]
+    text=run(args,name,1 if failed else 0)
+    counts_from_output(name,text,passed,failed)
     return text
 
 notice=pathlib.Path("tests/notice-registry.test.ts")
@@ -41,15 +55,18 @@ try:
         assert git("rev-parse",entry["parent"]+":"+f["path"])==f["sha"]
         hashes[f["path"]]=hashlib.sha256(pathlib.Path(f["path"]).read_bytes()).hexdigest()
     report["feature_sha256"]=hashes
-    report["node"]=run(["node","--version"],"node-version").strip()
-    report["npm"]=run(["npm","--version"],"npm-version").strip()
-    run(["npm","ci","--ignore-scripts","--no-fund","--no-audit"],"install")
-    run(["npm","run","typecheck"],"typecheck")
-    run(["npm","run","build"],"build")
-    run(["npm","run","check:unused-exports"],"unused-exports")
-    run(["npm","run","check:test-import-graph"],"test-import-graph")
-    run(["git","diff","--check",entry["upstream"],"HEAD"],"diff-check")
-    tap("feature-and-adjacent",[entry["featureTest"],"tests/pi-inline.test.ts","tests/inline-streaming.test.ts"],entry["featureCount"]+8)
+    if resume:
+        counts_from_output("feature-and-adjacent",(out/"feature-and-adjacent.log").read_text(),entry["featureCount"]+8)
+    else:
+        report["node"]=run(["node","--version"],"node-version").strip()
+        report["npm"]=run(["npm","--version"],"npm-version").strip()
+        run(["npm","ci","--ignore-scripts","--no-fund","--no-audit"],"install")
+        run(["npm","run","typecheck"],"typecheck")
+        run(["npm","run","build"],"build")
+        run(["npm","run","check:unused-exports"],"unused-exports")
+        run(["npm","run","check:test-import-graph"],"test-import-graph")
+        run(["git","diff","--check",entry["upstream"],"HEAD"],"diff-check")
+        tap("feature-and-adjacent",[entry["featureTest"],"tests/pi-inline.test.ts","tests/inline-streaming.test.ts"],entry["featureCount"]+8)
     original=notice.read_bytes()
     prior=subprocess.check_output(["git","show",entry["parent"]+":tests/notice-registry.test.ts"])
     assert prior!=original

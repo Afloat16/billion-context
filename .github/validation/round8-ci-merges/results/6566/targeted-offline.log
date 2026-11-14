@@ -1,0 +1,192 @@
+TAP version 13
+# Subtest: \#4985 inline streaming: caller receives tokens WHILE upstream is still generating
+ok 1 - \#4985 inline streaming: caller receives tokens WHILE upstream is still generating
+  ---
+  duration_ms: 870.832768
+  type: 'test'
+  ...
+# Subtest: registry: unique ids, valid tones, every key resolves in both locales
+ok 2 - registry: unique ids, valid tones, every key resolves in both locales
+  ---
+  duration_ms: 2.272861
+  type: 'test'
+  ...
+# Subtest: visibleNotices: fresh install sees the default flip + pck + wm intro, registry order (iot absent ⇒ hidden)
+ok 3 - visibleNotices: fresh install sees the default flip + pck + wm intro, registry order (iot absent ⇒ hidden)
+  ---
+  duration_ms: 1.443302
+  type: 'test'
+  ...
+# Subtest: storage-sqlite-default notice id is a dismissible builtin (no 400 on close)
+ok 4 - storage-sqlite-default notice id is a dismissible builtin (no 400 on close)
+  ---
+  duration_ms: 0.712943
+  type: 'test'
+  ...
+# Subtest: iot notice id is a dismissible builtin (no 400 on close)
+ok 5 - iot notice id is a dismissible builtin (no 400 on close)
+  ---
+  duration_ms: 0.397278
+  type: 'test'
+  ...
+# Subtest: visibleNotices: dismissing one hides only that one
+ok 6 - visibleNotices: dismissing one hides only that one
+  ---
+  duration_ms: 0.761045
+  type: 'test'
+  ...
+# 2026-11-13T21:56:27.672 [error] [v=0.1.213] [inline] compression engine bootstrap failed (retry in 30s): Error: engine could not start
+# 2026-11-13T21:56:27.708 [error] [v=0.1.213] [inline] compression engine bootstrap failed (retry in 30s): Error: engine could not start
+# Subtest: direct fallback preserves a Request's method, headers, body and target query
+ok 7 - direct fallback preserves a Request's method, headers, body and target query
+  ---
+  duration_ms: 39.917801
+  type: 'test'
+  ...
+# 2026-11-13T21:56:27.714 [error] [v=0.1.213] [inline] compression engine bootstrap failed (retry in 30s): Error: engine could not start
+# Subtest: direct fallback applies RequestInit overrides with native precedence
+ok 8 - direct fallback applies RequestInit overrides with native precedence
+  ---
+  duration_ms: 6.409296
+  type: 'test'
+  ...
+# 2026-11-13T21:56:27.718 [error] [v=0.1.213] [inline] compression engine bootstrap failed (retry in 30s): Error: engine could not start
+# Subtest: direct fallback inherits the Request body when init.body is null
+ok 9 - direct fallback inherits the Request body when init.body is null
+  ---
+  duration_ms: 4.445831
+  type: 'test'
+  ...
+# 2026-11-13T21:56:27.722 [error] [v=0.1.213] [inline] compression engine bootstrap failed (retry in 30s): Error: engine could not start
+# Subtest: direct fallback inherits the Request body when init.body is undefined
+ok 10 - direct fallback inherits the Request body when init.body is undefined
+  ---
+  duration_ms: 3.259125
+  type: 'test'
+  ...
+# Subtest: direct fallback retains a Request-backed stream
+ok 11 - direct fallback retains a Request-backed stream
+  ---
+  duration_ms: 3.801642
+  type: 'test'
+  ...
+# 2026-11-13T21:56:27.725 [error] [v=0.1.213] [inline] compression engine bootstrap failed (retry in 30s): Error: engine could not start
+# 2026-11-13T21:56:27.729 [error] [v=0.1.213] [inline] compression engine bootstrap failed (retry in 30s): Error: engine could not start
+# Subtest: direct fallback preserves GET Request headers
+ok 12 - direct fallback preserves GET Request headers
+  ---
+  duration_ms: 2.756399
+  type: 'test'
+  ...
+# 2026-11-13T21:56:27.733 [error] [v=0.1.213] [inline] compression engine bootstrap failed (retry in 30s): Error: engine could not start
+# 2026-11-13T21:56:27.735 [error] [v=0.1.213] [inline] compression engine bootstrap failed (retry in 30s): Error: engine could not start
+# 2026-11-13T21:56:27.736 [error] [v=0.1.213] [inline] compression engine bootstrap failed (retry in 30s): Error: engine could not start
+# Subtest: FormData overrides keep the serialized boundary and POST method
+ok 13 - FormData overrides keep the serialized boundary and POST method
+  ---
+  duration_ms: 4.359952
+  type: 'test'
+  ...
+# Subtest: direct fallback retains host-specific transport options
+ok 14 - direct fallback retains host-specific transport options
+  ---
+  duration_ms: 1.766569
+  type: 'test'
+  ...
+# Subtest: direct fallback does not replay an already consumed Request as an empty GET
+ok 15 - direct fallback does not replay an already consumed Request as an empty GET
+  ---
+  duration_ms: 1.168449
+  type: 'test'
+  ...
+# 2026-11-13T21:56:27.740 [error] [v=0.1.213] [inline] compression engine bootstrap failed (retry in 30s): Error: engine could not start
+# 2026-11-13T21:56:27.741 [error] [v=0.1.213] [inline] compression engine bootstrap failed (retry in 30s): Error: engine could not start
+# Subtest: an explicit replacement body can still be sent after the original was consumed
+ok 16 - an explicit replacement body can still be sent after the original was consumed
+  ---
+  duration_ms: 4.207583
+  type: 'test'
+  ...
+# Subtest: direct fallback preserves Request cancellation when startup fails
+ok 17 - direct fallback preserves Request cancellation when startup fails
+  ---
+  duration_ms: 1.312285
+  type: 'test'
+  ...
+# 2026-11-13T21:56:27.744 [error] [v=0.1.213] [inline] compression engine bootstrap failed (retry in 30s): Error: engine could not start
+# Subtest: direct fallback keeps string input init fields
+ok 18 - direct fallback keeps string input init fields
+  ---
+  duration_ms: 2.886894
+  type: 'test'
+  ...
+# Subtest: direct fallback keeps URL input init fields
+ok 19 - direct fallback keeps URL input init fields
+  ---
+  duration_ms: 2.075373
+  type: 'test'
+  ...
+# 2026-11-13T21:56:28.679 [error] [v=0.1.213] [inline] compression engine bootstrap failed (retry in 30s): Error: boom
+# Subtest: \#3278 transport: pseudo-origin URLs are served in-process, foreign URLs pass through
+ok 20 - \#3278 transport: pseudo-origin URLs are served in-process, foreign URLs pass through
+  ---
+  duration_ms: 406.114901
+  type: 'test'
+  ...
+# Subtest: \#4527 composition: native intercept + inline link stacked like the real arm — rewrites land on the inline engine, never on real DNS
+ok 21 - \#4527 composition: native intercept + inline link stacked like the real arm — rewrites land on the inline engine, never on real DNS
+  ---
+  duration_ms: 34.61049
+  type: 'test'
+  ...
+# Subtest: \#3278 transport: engine failure degrades model traffic direct, management fails loud
+ok 22 - \#3278 transport: engine failure degrades model traffic direct, management fails loud
+  ---
+  duration_ms: 6.890564
+  type: 'test'
+  ...
+# Subtest: \#3278 engine: real pipeline runs in-process — one upstream round trip, session tracked, admin reachable
+ok 23 - \#3278 engine: real pipeline runs in-process — one upstream round trip, session tracked, admin reachable
+  ---
+  duration_ms: 96.615403
+  type: 'test'
+  ...
+# Subtest: \#3278 engine: boot is TUI-safe — zero stderr writes while the interactive host owns the terminal
+ok 24 - \#3278 engine: boot is TUI-safe — zero stderr writes while the interactive host owns the terminal
+  ---
+  duration_ms: 2.037064
+  type: 'test'
+  ...
+# Subtest: \#4571 inline web: loopback Web UI listener + status panel names its lane
+ok 25 - \#4571 inline web: loopback Web UI listener + status panel names its lane
+  ---
+  duration_ms: 40.244439
+  type: 'test'
+  ...
+# Subtest: \#3278 engine: caller abort cancels the in-process round trip (spawn-mode parity)
+ok 26 - \#3278 engine: caller abort cancels the in-process round trip (spawn-mode parity)
+  ---
+  duration_ms: 454.823545
+  type: 'test'
+  ...
+# Subtest: in-place update over an npm-layout install with a relative .bin symlink succeeds twice in a row (gate Lane X regression)
+ok 27 - in-place update over an npm-layout install with a relative .bin symlink succeeds twice in a row (gate Lane X regression)
+  ---
+  duration_ms: 972.26529
+  type: 'test'
+  ...
+# Subtest: corrupt artifact rolls back to the previous npm-layout copy (merge-copy backup path)
+ok 28 - corrupt artifact rolls back to the previous npm-layout copy (merge-copy backup path)
+  ---
+  duration_ms: 13.543652
+  type: 'test'
+  ...
+1..28
+# tests 28
+# suites 0
+# pass 28
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 9316.974955

@@ -1,0 +1,40 @@
+TAP version 13
+# Subtest: registry: unique ids, valid tones, every key resolves in both locales
+ok 1 - registry: unique ids, valid tones, every key resolves in both locales
+  ---
+  duration_ms: 1.38872
+  type: 'test'
+  ...
+# Subtest: visibleNotices: fresh install sees the default flip + pck + wm intro, registry order (iot absent ⇒ hidden)
+ok 2 - visibleNotices: fresh install sees the default flip + pck + wm intro, registry order (iot absent ⇒ hidden)
+  ---
+  duration_ms: 0.973595
+  type: 'test'
+  ...
+# Subtest: storage-sqlite-default notice id is a dismissible builtin (no 400 on close)
+ok 3 - storage-sqlite-default notice id is a dismissible builtin (no 400 on close)
+  ---
+  duration_ms: 0.875688
+  type: 'test'
+  ...
+# Subtest: iot notice id is a dismissible builtin (no 400 on close)
+ok 4 - iot notice id is a dismissible builtin (no 400 on close)
+  ---
+  duration_ms: 0.244267
+  type: 'test'
+  ...
+# Subtest: visibleNotices: dismissing one hides only that one
+ok 5 - visibleNotices: dismissing one hides only that one
+  ---
+  duration_ms: 0.509607
+  type: 'test'
+  ...
+1..5
+# tests 5
+# suites 0
+# pass 5
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1696.766841

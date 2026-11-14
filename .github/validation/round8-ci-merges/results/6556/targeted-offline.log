@@ -1,0 +1,173 @@
+TAP version 13
+# Subtest: \#4985 inline streaming: caller receives tokens WHILE upstream is still generating
+ok 1 - \#4985 inline streaming: caller receives tokens WHILE upstream is still generating
+  ---
+  duration_ms: 888.975776
+  type: 'test'
+  ...
+# Subtest: header stamping retains Request cancellation on the rewrite path
+ok 2 - header stamping retains Request cancellation on the rewrite path
+  ---
+  duration_ms: 42.617358
+  type: 'test'
+  ...
+# Subtest: header stamping retains Request cancellation on the routed path
+ok 3 - header stamping retains Request cancellation on the routed path
+  ---
+  duration_ms: 8.542497
+  type: 'test'
+  ...
+# Subtest: header stamping retains Request cancellation on the self path
+ok 4 - header stamping retains Request cancellation on the self path
+  ---
+  duration_ms: 4.912143
+  type: 'test'
+  ...
+# Subtest: payload replacement retains later Request cancellation
+ok 5 - payload replacement retains later Request cancellation
+  ---
+  duration_ms: 0.868928
+  type: 'test'
+  ...
+# Subtest: payload replacement retains pre-existing Request cancellation
+ok 6 - payload replacement retains pre-existing Request cancellation
+  ---
+  duration_ms: 0.441064
+  type: 'test'
+  ...
+# Subtest: restore replacement retains later Request cancellation
+ok 7 - restore replacement retains later Request cancellation
+  ---
+  duration_ms: 0.628155
+  type: 'test'
+  ...
+# Subtest: restore replacement retains pre-existing Request cancellation
+ok 8 - restore replacement retains pre-existing Request cancellation
+  ---
+  duration_ms: 0.419812
+  type: 'test'
+  ...
+# Subtest: target replacement retains later Request cancellation
+ok 9 - target replacement retains later Request cancellation
+  ---
+  duration_ms: 0.416657
+  type: 'test'
+  ...
+# Subtest: target replacement retains pre-existing Request cancellation
+ok 10 - target replacement retains pre-existing Request cancellation
+  ---
+  duration_ms: 0.353182
+  type: 'test'
+  ...
+# Subtest: restored bodies retain the null init.signal override
+ok 11 - restored bodies retain the null init.signal override
+  ---
+  duration_ms: 2.160751
+  type: 'test'
+  ...
+# Subtest: restored bodies retain the replacement init.signal override
+ok 12 - restored bodies retain the replacement init.signal override
+  ---
+  duration_ms: 3.036951
+  type: 'test'
+  ...
+# Subtest: target replacement's streamed-body fallback retains caller cancellation
+ok 13 - target replacement's streamed-body fallback retains caller cancellation
+  ---
+  duration_ms: 0.898372
+  type: 'test'
+  ...
+# Subtest: registry: unique ids, valid tones, every key resolves in both locales
+ok 14 - registry: unique ids, valid tones, every key resolves in both locales
+  ---
+  duration_ms: 2.035464
+  type: 'test'
+  ...
+# Subtest: visibleNotices: fresh install sees the default flip + pck + wm intro, registry order (iot absent ⇒ hidden)
+ok 15 - visibleNotices: fresh install sees the default flip + pck + wm intro, registry order (iot absent ⇒ hidden)
+  ---
+  duration_ms: 1.941261
+  type: 'test'
+  ...
+# Subtest: storage-sqlite-default notice id is a dismissible builtin (no 400 on close)
+ok 16 - storage-sqlite-default notice id is a dismissible builtin (no 400 on close)
+  ---
+  duration_ms: 1.097652
+  type: 'test'
+  ...
+# Subtest: iot notice id is a dismissible builtin (no 400 on close)
+ok 17 - iot notice id is a dismissible builtin (no 400 on close)
+  ---
+  duration_ms: 0.364038
+  type: 'test'
+  ...
+# Subtest: visibleNotices: dismissing one hides only that one
+ok 18 - visibleNotices: dismissing one hides only that one
+  ---
+  duration_ms: 1.242911
+  type: 'test'
+  ...
+# 2026-11-13T21:56:27.931 [error] [v=0.1.213] [inline] compression engine bootstrap failed (retry in 30s): Error: boom
+# Subtest: \#3278 transport: pseudo-origin URLs are served in-process, foreign URLs pass through
+ok 19 - \#3278 transport: pseudo-origin URLs are served in-process, foreign URLs pass through
+  ---
+  duration_ms: 546.329909
+  type: 'test'
+  ...
+# Subtest: \#4527 composition: native intercept + inline link stacked like the real arm — rewrites land on the inline engine, never on real DNS
+ok 20 - \#4527 composition: native intercept + inline link stacked like the real arm — rewrites land on the inline engine, never on real DNS
+  ---
+  duration_ms: 8.763178
+  type: 'test'
+  ...
+# Subtest: \#3278 transport: engine failure degrades model traffic direct, management fails loud
+ok 21 - \#3278 transport: engine failure degrades model traffic direct, management fails loud
+  ---
+  duration_ms: 14.687395
+  type: 'test'
+  ...
+# Subtest: \#3278 engine: real pipeline runs in-process — one upstream round trip, session tracked, admin reachable
+ok 22 - \#3278 engine: real pipeline runs in-process — one upstream round trip, session tracked, admin reachable
+  ---
+  duration_ms: 106.702319
+  type: 'test'
+  ...
+# Subtest: \#3278 engine: boot is TUI-safe — zero stderr writes while the interactive host owns the terminal
+ok 23 - \#3278 engine: boot is TUI-safe — zero stderr writes while the interactive host owns the terminal
+  ---
+  duration_ms: 1.953988
+  type: 'test'
+  ...
+# Subtest: \#4571 inline web: loopback Web UI listener + status panel names its lane
+ok 24 - \#4571 inline web: loopback Web UI listener + status panel names its lane
+  ---
+  duration_ms: 39.146548
+  type: 'test'
+  ...
+# Subtest: \#3278 engine: caller abort cancels the in-process round trip (spawn-mode parity)
+ok 25 - \#3278 engine: caller abort cancels the in-process round trip (spawn-mode parity)
+  ---
+  duration_ms: 456.069445
+  type: 'test'
+  ...
+# Subtest: in-place update over an npm-layout install with a relative .bin symlink succeeds twice in a row (gate Lane X regression)
+ok 26 - in-place update over an npm-layout install with a relative .bin symlink succeeds twice in a row (gate Lane X regression)
+  ---
+  duration_ms: 713.75345
+  type: 'test'
+  ...
+# Subtest: corrupt artifact rolls back to the previous npm-layout copy (merge-copy backup path)
+ok 27 - corrupt artifact rolls back to the previous npm-layout copy (merge-copy backup path)
+  ---
+  duration_ms: 13.443802
+  type: 'test'
+  ...
+1..27
+# tests 27
+# suites 0
+# pass 27
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 8397.206737

@@ -1,0 +1,51 @@
+{
+  "purpose": "Verify requested integration of the upstream ci-fixes branch before updating contributor PR heads.",
+  "upstream": "1ca40871581c5009fdb69eea944f448d002098e7",
+  "requests": {
+    "6556": "https://github.com/ranxianglei/billion-context/pull/6556#issuecomment-6865265566",
+    "6566": "https://github.com/ranxianglei/billion-context/pull/6566#issuecomment-6865743347"
+  },
+  "candidates": [
+    {
+      "number": 6556,
+      "source": "baea1e3d57a8265e3ff6977e7494f48b55d29d6b",
+      "parent": "e3b2a8122c40d7d44a2725530f3977fc6833f939",
+      "upstream": "1ca40871581c5009fdb69eea944f448d002098e7",
+      "files": [
+        {
+          "path": "src/agent/native-intercept.ts",
+          "sha": "832ddaaa0a8f7a56bd70a983fc8a6ba4be2ce1a2"
+        },
+        {
+          "path": "tests/native-request-signal.test.ts",
+          "sha": "a144b5dd0ccb92567aaa8b224676ec7a7aa1144c"
+        }
+      ],
+      "featureTest": "tests/native-request-signal.test.ts",
+      "featureCount": 12
+    },
+    {
+      "number": 6566,
+      "source": "1dd16c35a911b831633f1b06ec033a0a477fbe7b",
+      "parent": "7da680cfc9331f3a6125e6280ca825c0869c8b8f",
+      "upstream": "1ca40871581c5009fdb69eea944f448d002098e7",
+      "files": [
+        {
+          "path": "src/agent/pi-inline.ts",
+          "sha": "68a1290378af10c780162f03a1fa257d1ea68139"
+        },
+        {
+          "path": "tests/pi-inline-fallback-request.test.ts",
+          "sha": "992558d4b87f3d3b2b461e2a765e899f3edd1ed5"
+        }
+      ],
+      "featureTest": "tests/pi-inline-fallback-request.test.ts",
+      "featureCount": 13
+    }
+  ],
+  "scope": "Each candidate has exactly the original feature's two files relative to ci-fixes; feature blobs are unchanged.",
+  "limits": [
+    "Targeted Linux Node 22 validation, not the full upstream matrix.",
+    "Watermark fastpath and Windows SQLite teardown failures remain tracked upstream; this integration does not claim to fix them."
+  ]
+}

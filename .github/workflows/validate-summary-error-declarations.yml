@@ -1,0 +1,90 @@
+name: Validate bounded summary error declarations
+
+on:
+  push:
+    branches:
+      - validation/summary-error-retry-declarations-20261119
+
+permissions:
+  contents: read
+
+jobs:
+  regression:
+    name: Summary HTTP regression (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 24]
+    env:
+      npm_config_fetch_retries: '5'
+      npm_config_fetch_retry_mintimeout: '5000'
+      npm_config_fetch_retry_maxtimeout: '60000'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: Afloat16/billion-context
+          ref: 84a55fb2952f4cf7f47feb893f8d4501eac8ce63
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci --ignore-scripts --no-fund --no-audit
+      - name: Record exact source and runtime
+        run: |
+          mkdir -p "$RUNNER_TEMP/summary-error-evidence"
+          git rev-parse HEAD | tee "$RUNNER_TEMP/summary-error-evidence/source-sha.txt"
+          node --version | tee "$RUNNER_TEMP/summary-error-evidence/node-version.txt"
+          npm --version | tee "$RUNNER_TEMP/summary-error-evidence/npm-version.txt"
+          git diff --exit-code
+      - name: Typecheck source and tests
+        run: npm run typecheck 2>&1 | tee "$RUNNER_TEMP/summary-error-evidence/typecheck.log"
+      - name: Prove three HTTP regression failures on the original reader
+        run: |
+          source_path=src/external-summary-http.ts
+          cp "$source_path" "$RUNNER_TEMP/summary-http-fixed.ts"
+          git show 6453feeeb842bd1e471d875bf00287e5036a96c7:"$source_path" > "$source_path"
+          set +e
+          node --import ./tests/preload-test-env.mjs --import ./tests/preload-storage-baseline.mjs --import tsx --test --test-reporter=tap tests/external-summary-http.test.ts 2>&1 | tee "$RUNNER_TEMP/summary-error-evidence/baseline.tap"
+          test_status=${PIPESTATUS[0]}
+          set -e
+          cp "$RUNNER_TEMP/summary-http-fixed.ts" "$source_path"
+          test "$test_status" -eq 1
+          node --input-type=module <<'NODE'
+          import assert from "node:assert/strict";
+          import { readFileSync } from "node:fs";
+          const log = readFileSync(process.env.RUNNER_TEMP + "/summary-error-evidence/baseline.tap", "utf8");
+          const failures = [...log.matchAll(/^not ok \d+ - (.+)$/gm)].map((match) => match[1]);
+          assert.equal(failures.length, 3, JSON.stringify(failures));
+          assert.ok(failures.every((name) => name.startsWith("external summary HTTP: long JSON retry declaration (")));
+          assert.match(log, /^# fail 3$/m);
+          console.log("Verified exactly the three long-envelope HTTP regression failures.");
+          NODE
+      - name: Test external summary families and existing retry classification
+        run: |
+          node --import ./tests/preload-test-env.mjs --import ./tests/preload-storage-baseline.mjs --import tsx --test --test-concurrency=2 --test-reporter=tap \
+            tests/external-summary*.test.ts \
+            tests/issue2639-ext-summary-fresh-budget.test.ts \
+            tests/issue3635-summary-length-cap.test.ts \
+            tests/issue4460-external-summary-conversation-prompt.test.ts \
+            tests/issue4833-summary-abort-provenance.test.ts \
+            tests/summary-credential-byte-limit.test.ts \
+            tests/summary-empty-tool-calls.test.ts \
+            tests/loop-core.test.ts \
+            tests/retry-error-body.test.ts \
+            tests/log-mask.test.ts \
+            2>&1 | tee "$RUNNER_TEMP/summary-error-evidence/fixed.tap"
+      - name: Build bundled package
+        run: npm run build 2>&1 | tee "$RUNNER_TEMP/summary-error-evidence/build.log"
+      - name: Verify source tree was restored
+        run: git diff --exit-code
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: summary-error-declarations-84a55fb-node-${{ matrix.node }}
+          path: ${{ runner.temp }}/summary-error-evidence

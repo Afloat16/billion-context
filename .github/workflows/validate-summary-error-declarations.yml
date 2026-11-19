@@ -1,3 +1,4 @@
+# Fork-only validation of public source; no upstream CI or secrets.
 name: Validate bounded summary error declarations
 
 on:

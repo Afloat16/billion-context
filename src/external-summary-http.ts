@@ -62,7 +62,7 @@ async function waitBeforeRetry(ms: number, signal: AbortSignal): Promise<void> {
     await sleep(summaryRetryDelayOverrideMs ?? ms, signal);
 }
 
-async function readErrorSnippet(response: Response): Promise<string> {
+async function readErrorBody(response: Response): Promise<string> {
     try {
         const reader = response.body?.getReader();
         if (!reader) return "";
@@ -74,9 +74,7 @@ async function readErrorSnippet(response: Response): Promise<string> {
             text += decoder.decode(value, { stream: true });
             if (text.length >= SUMMARY_ERROR_BODY_READ_CHARS) { await reader.cancel().catch(() => { }); break; }
         }
-        const trimmed = text.trim().replace(/\s+/g, " ");
-        if (!trimmed) return "";
-        return trimmed.length > SUMMARY_ERROR_BODY_LOG_CHARS ? `${trimmed.slice(0, SUMMARY_ERROR_BODY_LOG_CHARS)}…` : trimmed;
+        return text.slice(0, SUMMARY_ERROR_BODY_READ_CHARS).trim().replace(/\s+/g, " ");
     } catch { return ""; }
 }
 
@@ -294,10 +292,11 @@ export function createSummaryHttpCandidate(target: SummaryHttpTarget, maxRespons
                 }
                 try {
                     if (!dispatched.response.ok) {
-                        const snippet = await readErrorSnippet(dispatched.response);
-                        // Mask only for the log line: the verdict below needs the raw body markers.
+                        const errorBody = await readErrorBody(dispatched.response);
+                        const snippet = errorBody.length > SUMMARY_ERROR_BODY_LOG_CHARS ? `${errorBody.slice(0, SUMMARY_ERROR_BODY_LOG_CHARS)}…` : errorBody;
+                        // Mask only for the log line: the verdict needs the complete bounded body.
                         loggerLog("warn", `[external-summary] candidate ${plan.model} attempt ${attempt}/${SUMMARY_MAX_ATTEMPTS} rejected: HTTP ${dispatched.response.status} (${diagnostics()}) from ${host}${snippet ? ` — ${maskUrlsInText(snippet)}` : ""}`);
-                        if (attempt < SUMMARY_MAX_ATTEMPTS && !signal.aborted && isTransientUpstreamError(dispatched.response.status, snippet)) {
+                        if (attempt < SUMMARY_MAX_ATTEMPTS && !signal.aborted && isTransientUpstreamError(dispatched.response.status, errorBody)) {
                             await waitBeforeRetry(retryAfterDelayMs(dispatched.response.headers.get("retry-after"), backoffDelayMs(attempt)), signal);
                             continue;
                         }

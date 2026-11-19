@@ -246,6 +246,97 @@ test("external summary HTTP: a risk-control 403 body retries like a rate limit",
     assert.equal(hits, 3);
 });
 
+for (const [label, body] of [
+    ["boolean before detail", JSON.stringify({ retryable: true, detail: "x".repeat(2048) })],
+    ["actions after detail", JSON.stringify({ detail: "x".repeat(2048), actions: ["RETRY"] })],
+    ["JSON-string-wrapped declaration", JSON.stringify({ error: { message: JSON.stringify({ retryable: true, detail: "x".repeat(2048) }) } })],
+] as const) {
+    test("external summary HTTP: long JSON retry declaration (" + label + ") recovers on the second dispatch", async () => {
+        assert.ok(body.length > 1024 && body.length < 8192);
+        let hits = 0;
+        _setSummaryRetryDelayForTest(0);
+        await upstream((_req, res) => {
+            hits++;
+            if (hits === 1) { res.writeHead(400, { "content-type": "application/json" }); res.end(body); return; }
+            res.end(JSON.stringify(completion("responses")));
+        }, async (url) => {
+            const result = await new ExternalSummaryExecutor(1).execute(work, [createSummaryHttpCandidate(target(url), 4096)], budget);
+            assert.equal(result.status, "success");
+            if (result.status === "success") assert.equal(result.summary, summary);
+        });
+        assert.equal(hits, 2);
+        assert.deepEqual(_summaryRetryDelaysForTest(), [1000]);
+    });
+}
+
+for (const [label, body] of [
+    ["false declaration", JSON.stringify({ retryable: false, detail: "x".repeat(2048) })],
+    ["string true", JSON.stringify({ retryable: "true", detail: "x".repeat(2048) })],
+    ["actions without RETRY", JSON.stringify({ actions: ["SUBMIT_FEEDBACK"], detail: "x".repeat(2048) })],
+    ["declaration in an envelope beyond the read cap", JSON.stringify({ retryable: true, detail: "x".repeat(8192) })],
+] as const) {
+    test("external summary HTTP: long error body with " + label + " is not retried", async () => {
+        assert.ok(body.length > 1024);
+        let hits = 0;
+        _setSummaryRetryDelayForTest(0);
+        await upstream((_req, res) => {
+            hits++;
+            res.writeHead(400, { "content-type": "application/json" });
+            res.end(body);
+        }, async (url) => {
+            const result = await new ExternalSummaryExecutor(1).execute(work, [createSummaryHttpCandidate(target(url), 4096)], budget);
+            assert.equal(result.status, "failed");
+            assert.deepEqual(result.attempts, [{ targetIndex: 0, outcome: "error" }]);
+        });
+        assert.equal(hits, 1);
+        assert.deepEqual(_summaryRetryDelaysForTest(), []);
+    });
+}
+
+test("external summary HTTP: whitespace-normalized error markers still recover", async () => {
+    let hits = 0;
+    _setSummaryRetryDelayForTest(0);
+    await upstream((_req, res) => {
+        hits++;
+        if (hits === 1) { res.writeHead(400); res.end("rate\n \tlimit exceeded"); return; }
+        res.end(JSON.stringify(completion("responses")));
+    }, async (url) => {
+        const result = await new ExternalSummaryExecutor(1).execute(work, [createSummaryHttpCandidate(target(url), 4096)], budget);
+        assert.equal(result.status, "success");
+    });
+    assert.equal(hits, 2);
+    assert.deepEqual(_summaryRetryDelaysForTest(), [1000]);
+});
+
+test("external summary HTTP: long error logs remain truncated and URL-masked", async () => {
+    const lines: string[] = [];
+    const body = JSON.stringify({
+        message: "See https://private-user:private-password@api.openai.com/error?token=hidden-query#hidden-fragment",
+        detail: "x".repeat(2048),
+        tail: "hidden-tail",
+    });
+    _setSummaryRetryDelayForTest(0);
+    setLogCapture((_level, msg) => lines.push(msg));
+    await upstream((_req, res) => {
+        res.writeHead(400, { "content-type": "application/json" });
+        res.end(body);
+    }, async (url) => {
+        const result = await new ExternalSummaryExecutor(1).execute(work, [createSummaryHttpCandidate(target(url), 4096)], budget);
+        assert.equal(result.status, "failed");
+        assert.deepEqual(result.attempts, [{ targetIndex: 0, outcome: "error" }]);
+    });
+    const rejected = lines.filter((line) => line.includes("rejected: HTTP 400"));
+    assert.equal(rejected.length, 1);
+    const snippet = rejected[0].split(" — ")[1];
+    assert.ok(snippet && snippet.length <= 1025);
+    assert.ok(snippet.endsWith("…"));
+    assert.match(snippet, /https:\/\/api\.openai\.com\/error/);
+    for (const hidden of ["private-user", "private-password", "hidden-query", "hidden-fragment", "hidden-tail"]) {
+        assert.equal(rejected[0].includes(hidden), false);
+    }
+    assert.deepEqual(_summaryRetryDelaysForTest(), []);
+});
+
 test("external summary HTTP: a pre-response socket death retries then recovers", async () => {
     let hits = 0;
     _setSummaryRetryDelayForTest(0);

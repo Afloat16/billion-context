@@ -10,6 +10,7 @@ import {
     maxShrinkPerCompress as knobMaxShrinkPerCompress,
 } from "./knobs.js";
 import { log } from "./logger.js";
+import { maskUrlForLog } from "./log-mask.js";
 
 /** HTTP robustness helpers for the proxy.
 
@@ -213,9 +214,6 @@ export async function fetchWithTimeout(
     const controller = new AbortController();
     let cleared = false;
     let phase: "first-byte" | "body" = "first-byte";
-    const safeUrl = () => {
-        try { return new URL(url).origin + new URL(url).pathname; } catch { return url.slice(0, 120); }
-    };
     const armTimer = (delayMs: number) => {
         const t = setTimeout(() => {
             liveUpstreamTimers.delete(t);
@@ -223,7 +221,7 @@ export async function fetchWithTimeout(
             // the fetch rejected with a bare AbortError and nothing in the log
             // explained it (#5904 forensics: 300s of total silence). Name the
             // phase and budget every time it trips.
-            log("warn", `upstream watchdog fired (${phase} phase, ${delayMs}ms budget) — ${String(opts.method ?? "GET")} ${safeUrl()} aborted: ${phase === "first-byte" ? "no response headers" : "no body chunk"} in budget`);
+            log("warn", `upstream watchdog fired (${phase} phase, ${delayMs}ms budget) — ${String(opts.method ?? "GET")} ${maskUrlForLog(url)} aborted: ${phase === "first-byte" ? "no response headers" : "no body chunk"} in budget`);
             if (phase === "first-byte" && firstByteIsSplit) firstByteTripped = true;
             controller.abort();
         }, idleTimerDelayOverrideMs ?? delayMs);

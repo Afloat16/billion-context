@@ -181,6 +181,9 @@ export const workerResolveHost: WorkerProbe = (host) =>
             if (settled) return;
             settled = true;
             clearTimeout(timer);
+            if (msg?.error === "ETIMEDOUT") {
+                try { void worker?.terminate().catch(() => undefined); } catch { /* already gone */ }
+            }
             if (msg && msg.ok === true && Array.isArray(msg.addrs)) resolve(msg.addrs);
             else reject(Object.assign(new Error(`worker dns lookup failed (${String(msg?.error ?? "unknown")})`), { code: typeof msg?.error === "string" && msg.error ? msg.error : "EWORKERLOOKUP" }));
         });

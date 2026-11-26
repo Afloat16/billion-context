@@ -107,13 +107,14 @@ const CLIENT_MARK_IDS_KEY = "anthropicClientCacheMarks";
  *  requests, so the outbound history stays append-stable and the checkpoint
  *  at that position keeps matching. Pinned marks die only by folding (their
  *  message leaves the live view). The client's current marks are always emitted
- *  (they are the client's caching intent); pinning only adds the historical
- *  ones back, within Anthropic's 4-breakpoint budget (system + tools + message
- *  marks combined, WC-010). If the merged set would exceed the budget, the
- *  NEWEST pinned-only marks are evicted until it fits, so any seam lands next
- *  to the tail, never on an early element. Returns the merged map for
- *  coreToAnthropic (and for the round-2 adapter via anthropicClientCacheControls,
- *  #2499). */
+ *  (they are the client's caching intent); an explicit update also replaces
+ *  the stored control without changing its first-marked position. Pinning
+ *  only adds the historical ones back, within Anthropic's 4-breakpoint budget
+ *  (system + tools + message marks combined, WC-010). If the merged set would
+ *  exceed the budget, the NEWEST pinned-only marks are evicted until it fits,
+ *  so any seam lands next to the tail, never on an early element. Returns the
+ *  merged map for coreToAnthropic (and for the round-2 adapter via
+ *  anthropicClientCacheControls, #2499). */
 export function pinClientMessageMarks(
     clientControls: Map<string, unknown>,
     liveIds: Set<string>,
@@ -139,8 +140,9 @@ export function pinClientMessageMarks(
     // Pin the client's current marks (first-marked order) for later requests.
     for (const [id, control] of clientControls) {
         if (!liveIds.has(id)) continue;
-        if (kept.some((p) => p.id === id)) continue;
-        kept.push({ id, control });
+        const existing = kept.find((p) => p.id === id);
+        if (existing) existing.control = control;
+        else kept.push({ id, control });
     }
     for (const p of kept) {
         if (!merged.has(p.id)) merged.set(p.id, p.control);

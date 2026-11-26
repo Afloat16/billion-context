@@ -53,6 +53,37 @@ test("#6861 unit: a pinned mark retires when its message folds away", () => {
     assert.equal(after.size, 1, "only the live mark remains");
 });
 
+for (const [previous, current] of [
+    [{ type: "ephemeral", ttl: "5m" }, { type: "ephemeral", ttl: "1h" }],
+    [{ type: "ephemeral", ttl: "1h" }, { type: "ephemeral", ttl: "5m" }],
+    [{ type: "ephemeral", ttl: "1h" }, { type: "ephemeral" }],
+]) {
+    test(`a moved client mark retains its latest control: ${JSON.stringify(previous)} → ${JSON.stringify(current)}`, () => {
+        const s = session();
+        const live = new Set(["msg-a", "msg-b"]);
+        pinClientMessageMarks(new Map([["msg-a", previous]]), live, s, 3);
+        const firstPins = s.metadata["anthropicClientCacheMarks"];
+        const changed = pinClientMessageMarks(new Map([["msg-a", current]]), live, s, 3);
+        assert.deepEqual(changed.get("msg-a"), current, "the explicit client value already wins on this turn");
+        assert.deepEqual(firstPins, [{ id: "msg-a", control: previous }], "refresh does not mutate earlier metadata snapshots");
+        const moved = pinClientMessageMarks(new Map([["msg-b", EPHEMERAL]]), live, s, 3);
+        assert.deepEqual(moved.get("msg-a"), current, "later requests must not resurrect the first-seen value");
+        assert.deepEqual(moved.get("msg-b"), EPHEMERAL);
+    });
+}
+
+test("refreshing a client control preserves first-marked eviction order", () => {
+    const s = session();
+    const live = new Set(["msg-a", "msg-b", "msg-c"]);
+    const hour = { type: "ephemeral", ttl: "1h" };
+    pinClientMessageMarks(new Map([["msg-a", EPHEMERAL], ["msg-b", EPHEMERAL]]), live, s, 3);
+    pinClientMessageMarks(new Map([["msg-a", hour]]), live, s, 3);
+    const moved = pinClientMessageMarks(new Map([["msg-c", EPHEMERAL]]), live, s, 2);
+    assert.deepEqual(moved.get("msg-a"), hour, "the refreshed oldest pin survives");
+    assert.equal(moved.has("msg-b"), false, "the newest pinned-only mark is still evicted first");
+    assert.equal(moved.size, 2);
+});
+
 test("#6861 unit: over budget, the NEWEST pinned-only marks are evicted first; current marks never drop", () => {
     const s = session();
     // Cap 1 with two live pinned marks and one current mark: the newest
@@ -175,10 +206,14 @@ interface Msg {
     content: string | { type: "text"; text: string; cache_control?: unknown }[];
 }
 
-async function postModel(rig: Rig, sessionId: string, messages: Msg[]): Promise<Response> {
+async function postModel(rig: Rig, sessionId: string, messages: Msg[], pluginMode = false): Promise<Response> {
     return fetch(`http://127.0.0.1:${rig.proxyPort}/bili/http://127.0.0.1:${rig.portHint()}/v1/messages`, {
         method: "POST",
-        headers: { "content-type": "application/json", "x-session-affinity": sessionId },
+        headers: {
+            "content-type": "application/json",
+            "x-session-affinity": sessionId,
+            ...(pluginMode ? { "x-bili-plugin": "opencode", "x-bili-plugin-conversation": sessionId, "x-acp-session": sessionId } : {}),
+        },
         body: JSON.stringify({ model: "l6861-model", max_tokens: 8192, stream: true, messages }),
     });
 }
@@ -238,3 +273,53 @@ test("#6861 e2e: the client's moving breakpoint stays pinned, so turn 1's messag
         await rig.closeAll();
     }
 });
+
+for (const pluginMode of [false, true]) {
+    test(`three real HTTP turns retain current cache intent with pluginMode=${pluginMode}`, async () => {
+        const rig = await startRig();
+        try {
+            const sid = `cache-control-refresh-${pluginMode}-${process.pid}`;
+            const five = { type: "ephemeral", ttl: "5m" };
+            const hour = { type: "ephemeral", ttl: "1h" };
+            const turns: Msg[][] = [
+                [
+                    { role: "user", content: [{ type: "text", text: "u1", cache_control: five }] },
+                    { role: "assistant", content: "a1" },
+                ],
+                [
+                    { role: "user", content: [{ type: "text", text: "u1", cache_control: hour }] },
+                    { role: "assistant", content: "a1" },
+                    { role: "user", content: [{ type: "text", text: "u2", cache_control: five }] },
+                ],
+                [
+                    { role: "user", content: "u1" },
+                    { role: "assistant", content: "a1" },
+                    { role: "user", content: [{ type: "text", text: "u2", cache_control: five }] },
+                    { role: "assistant", content: "a2" },
+                    { role: "user", content: [{ type: "text", text: "u3", cache_control: five }] },
+                ],
+            ];
+            for (const messages of turns) {
+                const res = await postModel(rig, sid, messages, pluginMode);
+                assert.equal(res.status, 200);
+                await res.text();
+            }
+            assert.equal(rig.upstreamBodies.length, 3);
+            const controls = rig.upstreamBodies.map(raw => {
+                const body = JSON.parse(raw) as AnthropicBody;
+                const first = body.messages[0];
+                const blocks = Array.isArray(first.content) ? first.content : [{ type: "text", text: first.content }];
+                assert.ok(blocks.some(block => block.text?.includes("u1")), "inspect the original user message, including its rendered refs");
+                return blocks.find(block => block.cache_control)?.cache_control;
+            });
+            assert.deepEqual(controls, [five, hour, pluginMode ? undefined : hour], "proxy pins keep the latest explicit value; plugin mode keeps the host's moving marks");
+            if (!pluginMode) {
+                const second = (JSON.parse(rig.upstreamBodies[1]) as AnthropicBody).messages[0];
+                const third = (JSON.parse(rig.upstreamBodies[2]) as AnthropicBody).messages[0];
+                assert.deepEqual(third, second, "the updated message stays byte-stable when its client mark moves");
+            }
+        } finally {
+            await rig.closeAll();
+        }
+    });
+}

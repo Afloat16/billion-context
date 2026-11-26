@@ -1,0 +1,113 @@
+name: Validate image receipt scan reuse
+
+on:
+  push:
+    branches: [2026-11-26_validate-image-receipts]
+
+permissions:
+  contents: read
+
+jobs:
+  static-gates:
+    name: static-gates (${{ matrix.os }}, ${{ matrix.node }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, node: 24 }
+          - { os: windows-latest, node: 22 }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 7e354b3de22745651ea4875b8464cd9784a16fd1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm install --ignore-scripts --no-fund --no-audit
+      - run: npm run typecheck
+      - run: npm --prefix kernel test
+      - run: npm --prefix pi-subagents test
+      - run: npm run build
+      - run: node scripts/check-dist-thin-install.mjs
+      - run: node scripts/check-unused-exports.mjs
+      - run: node scripts/check-test-import-graph.mjs
+
+  image-regressions:
+    name: real image regressions and hermetic E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 7e354b3de22745651ea4875b8464cd9784a16fd1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install exact image-lane dependencies
+        id: install
+        run: npm ci
+      - name: Typecheck
+        id: typecheck
+        run: npm run typecheck
+      - name: Run all nine affected image suites
+        run: >-
+          node --import ./tests/preload-test-env.mjs --import tsx --test
+          tests/image-receipt-scan.test.ts
+          tests/issue3400-image-rescale.test.ts
+          tests/egress-shed-tool-result-scope.test.ts
+          tests/egress-shed-tool-result-http.test.ts
+          tests/egress-shed-media.test.ts
+          tests/issue5745-image-shed-cap.test.ts
+          tests/issue4124-image-count-cap.test.ts
+          tests/image-rescale-cache-budget.test.ts
+          tests/issue7146-image-byte-trigger.test.ts
+      - name: Hermetic real-image billing E2E
+        if: ${{ !cancelled() && steps.install.outcome == 'success' && steps.typecheck.outcome == 'success' }}
+        run: npm run test:e2e:image
+
+  full-suite:
+    name: test (${{ matrix.os }}, ${{ matrix.node }}, ${{ matrix.shard }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, node: 22, shard: 1, total: 3 }
+          - { os: ubuntu-latest, node: 22, shard: 2, total: 3 }
+          - { os: ubuntu-latest, node: 22, shard: 3, total: 3 }
+          - { os: ubuntu-latest, node: 24, shard: 1, total: 3 }
+          - { os: ubuntu-latest, node: 24, shard: 2, total: 3 }
+          - { os: ubuntu-latest, node: 24, shard: 3, total: 3 }
+          - { os: windows-latest, node: 22, shard: 1, total: 5 }
+          - { os: windows-latest, node: 22, shard: 2, total: 5 }
+          - { os: windows-latest, node: 22, shard: 3, total: 5 }
+          - { os: windows-latest, node: 22, shard: 4, total: 5 }
+          - { os: windows-latest, node: 22, shard: 5, total: 5 }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 7e354b3de22745651ea4875b8464cd9784a16fd1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - name: Restore kernel dist cache
+        uses: actions/cache@v4
+        with:
+          path: kernel/dist
+          key: pretest-dist-kernel-v1-${{ runner.os }}-${{ hashFiles('kernel/src/**', 'kernel/tsup.config.ts', 'kernel/tsconfig.json', 'kernel/package.json', 'kernel/package-lock.json', 'package-lock.json') }}
+      - name: Restore pi-subagents dist cache
+        uses: actions/cache@v4
+        with:
+          path: pi-subagents/dist
+          key: pretest-dist-pisub-v1-${{ runner.os }}-${{ hashFiles('pi-subagents/src/**', 'pi-subagents/tsup.config.ts', 'pi-subagents/tsconfig.json', 'pi-subagents/package.json', 'pi-subagents/package-lock.json', 'package-lock.json') }}
+      - run: npm install --ignore-scripts --no-fund --no-audit
+      - run: node scripts/run-ci-tests.mjs
+        env:
+          ACP_TEST_CLAUDE_NATIVE: "1"
+          CI_TEST_SHARD: "${{ matrix.shard }}/${{ matrix.total }}"

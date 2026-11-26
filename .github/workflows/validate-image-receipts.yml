@@ -1,4 +1,5 @@
 name: Validate image receipt scan reuse
+run-name: Image receipt validation at 7e354b3
 
 on:
   push:
